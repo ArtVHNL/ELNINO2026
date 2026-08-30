@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { feature } from "topojson-client";
 import { CATEGORY_META, impactFor } from "../impact";
+import { msg, useI18n } from "../i18n";
 
 interface CountryFeature {
   type: "Feature";
@@ -26,7 +27,15 @@ interface HoverState {
 const W = 880;
 const H = 440;
 
+const CAT_KEY: Record<string, string> = {
+  drought: "catDrought", flood: "catFlood", wetter: "catWet", muted: "catMuted",
+};
+const TIP_KEY: Record<string, string> = {
+  drought: "tipDrought", flood: "tipFlood", wetter: "tipWet", muted: "tipMuted",
+};
+
 export function ImpactMap() {
+  const { lang, t } = useI18n();
   const [countries, setCountries] = useState<CountryFeature[] | null>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -68,7 +77,7 @@ export function ImpactMap() {
   if (!countries) {
     return (
       <div className="mt-4 h-[300px] flex items-center justify-center text-sm text-gray-500">
-        Loading map…
+        {msg(t, "loadingMap")}
       </div>
     );
   }
@@ -97,8 +106,8 @@ export function ImpactMap() {
               if (!rect) return;
               setHover({
                 name: s.name,
-                phrase: s.info.phrase,
-                category: s.meta.label,
+                phrase: lang === "en" ? s.info.phrase : msg(t, TIP_KEY[s.info.category]),
+                category: msg(t, CAT_KEY[s.info.category]),
                 x: ((e.clientX - rect.left) / rect.width) * 100,
                 y: ((e.clientY - rect.top) / rect.height) * 100,
               });
@@ -116,7 +125,7 @@ export function ImpactMap() {
           <div className="flex items-center gap-2 text-xs font-bold text-gray-900">
             <span
               className="inline-block h-2.5 w-2.5"
-              style={{ backgroundColor: hover.category === "Little change expected" ? "#E5E7EB" : (hover.category === "Drier than usual" ? "#DC2626" : hover.category === "Flooding risk" ? "#1D4ED8" : "#60A5FA") }}
+              style={{ backgroundColor: hover.category === msg(t, "catMuted") ? "#E5E7EB" : (hover.category === msg(t, "catDrought") ? "#DC2626" : hover.category === msg(t, "catFlood") ? "#1D4ED8" : "#60A5FA") }}
             />
             {hover.name}
           </div>
@@ -132,7 +141,7 @@ export function ImpactMap() {
               className="inline-block h-3 w-6 border border-gray-200"
               style={{ backgroundColor: CATEGORY_META[cat].fill, opacity: CATEGORY_META[cat].opacity }}
             />
-            {CATEGORY_META[cat].label}
+            {msg(t, CAT_KEY[cat])}
           </span>
         ))}
       </div>

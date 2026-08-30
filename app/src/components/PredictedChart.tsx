@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 import * as d3 from "d3";
 import type { IndexValue, Nino34Forecast } from "../data";
+import { msg, useI18n } from "../i18n";
 
 interface Props {
   observed: IndexValue[];    // monthly ERSST anomalies (full history)
@@ -29,6 +30,7 @@ function monthLabel(idx: number): string {
 }
 
 export function PredictedChart({ observed, forecast }: Props) {
+  const { t } = useI18n();
   const { x, y, obsPath, obsPts, meanPath, bandPath, connectPath, gridYs, ticks } = useMemo(() => {
     const obs = observed.slice(-12);
     const months = forecast.months;
@@ -99,13 +101,13 @@ export function PredictedChart({ observed, forecast }: Props) {
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-700">
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[2px] w-8 bg-[#111827]" /> Observed (measured)
+          <span className="inline-block h-[2px] w-8 bg-[#111827]" /> {msg(t, "observed")}
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[3px] w-8 bg-[#DC2626]" /> Forecast (6-model mean)
+          <span className="inline-block h-[3px] w-8 bg-[#DC2626]" /> {msg(t, "forecastMean")}
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-3 w-8 bg-[#DC2626]/10 border border-[#DC2626]/30" /> Model range
+          <span className="inline-block h-3 w-8 bg-[#DC2626]/10 border border-[#DC2626]/30" /> {msg(t, "modelRange")}
         </span>
       </div>
     </div>

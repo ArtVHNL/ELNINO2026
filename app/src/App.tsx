@@ -4,6 +4,8 @@
 // ============================================================================
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnsoDashboardData, fetchLiveEnsoData, ComparisonEvent } from "./data";
+import { LANGS, msg, useI18n } from "./i18n";
+import { useState as _useState, useRef as _useRef } from "react";
 import { AlignedComparison } from "./components/AlignedComparison";
 import { MiniThermometer } from "./components/MiniThermometer";
 import { ImpactMap } from "./components/ImpactMap";
@@ -30,6 +32,9 @@ function fmtSigned(v: number, digits = 1): string {
 }
 
 export default function App() {
+  const { lang, setLang, t } = useI18n();
+  const T = (key: string, vars?: Record<string, string>) => msg(t, key, vars);
+  const [langOpen, setLangOpen] = _useState(false);
   const [data, setData] = useState<EnsoDashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,16 +75,14 @@ export default function App() {
     // --- headline & lead (official facts only)
     const chanceRaw = st.probabilities?.very_strong_chance || null;
     const chance = chanceRaw ? (chanceRaw[0].toLowerCase() + chanceRaw.slice(1)) : null;
-    const headline = chance
-      ? `El Niño strengthens; a very strong event is expected this winter`
-      : `El Niño advisory active`;
+    const headline = chance ? T("headlineStrong") : T("headlineFallback");
 
     const monthlyLatest = monthly.length ? monthly[monthly.length - 1] : null;
     const monthlyPrev = monthly.length > 1 ? monthly[monthly.length - 2] : null;
     const mDelta =
       monthlyLatest && monthlyPrev ? monthlyLatest.value - monthlyPrev.value : null;
     const monthLab = monthlyLatest
-      ? MONTH_FULL[new Date(monthlyLatest.date + "T00:00:00Z").getUTCMonth()]
+      ? (t as any).months[new Date(monthlyLatest.date + "T00:00:00Z").getUTCMonth()]
       : "";
     const monthlyVal = monthlyLatest?.value ?? null;
 
@@ -114,25 +117,25 @@ export default function App() {
 
     const thermos = [
       {
-        label: "Warmer than normal",
+        label: T("thermoWarmer"),
         value: monthlyVal ?? 0,
         suffix: "°C",
         decimals: 1,
-        caption: `${monthLab} 2026 · Niño-3.4 region · water now ${sstNowLab}`,
+        caption: T("captionWater", { month: monthLab, temp: sstNowLab }),
       },
       {
-        label: "Moderate El Niño",
+        label: T("thermoModerate"),
         value: oni?.value ?? 0,
         suffix: "°C",
         decimals: 2,
-        caption: `Official 3-month index (ONI), May–July 2026`,
+        caption: T("captionOni"),
       },
       {
-        label: "Warm layer below the surface",
+        label: T("thermoWarmLayer"),
         value: wwv?.value ?? 0,
         suffix: "°C",
         decimals: 2,
-        caption: `2.2°C extra heat in the upper 300 m, July 2026`,
+        caption: T("captionWarm", { value: "+2.2°C" }),
       },
     ];
 
@@ -144,8 +147,12 @@ export default function App() {
       const mm = fc.months[peak].split("-");
       const MONTHS_SHORT_FC = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const peakLabel = `${MONTHS_SHORT_FC[parseInt(mm[1], 10) - 1]} ${mm[0]}`;
-      forecastSummary =
-        `Forecast: +${fc.mean[peak].toFixed(1)}°C peak in ${peakLabel} (range +${fc.min[peak].toFixed(1)}–+${fc.max[peak].toFixed(1)}°C).`;
+      forecastSummary = T("forecastSummary", {
+        value: `+${fc.mean[peak].toFixed(1)}`,
+        month: peakLabel,
+        min: `+${fc.min[peak].toFixed(1)}`,
+        max: `+${fc.max[peak].toFixed(1)}`,
+      });
     }
 
     // --- informative intro (our words, based on the official statement)
@@ -154,24 +161,25 @@ export default function App() {
       if (!m) return null;
       const peak = m.mean.reduce((best, v, i) => (v > m.mean[best] ? i : best), 0);
       const [yy, mm] = m.months[peak].split("-");
-      const peakLabel = `${MONTH_FULL[parseInt(mm, 10) - 1].slice(0, 3)} ${yy}`;
+      const peakLabel = `${(t as any).monthsShort[parseInt(mm, 10) - 1]} ${yy}`;
       return { v: m.mean[peak], label: peakLabel };
     })();
     const intro =
-      `The equatorial Pacific is warming steadily: the ${monthLab} index stands at ${monthlyVal !== null ? fmtSigned(monthlyVal) : "—"}.` +
-      ` The U.S. Climate Prediction Center keeps an El Niño Advisory and puts the chance of a very strong event this fall and winter ${chance || "high"}.` +
-      (fcPeak ? ` Six international climate models expect the water temperature to peak at +${fcPeak.v.toFixed(1)}°C around ${fcPeak.label}.` : "");
+      T("introWarm", { month: monthLab, value: monthlyVal !== null ? fmtSigned(monthlyVal) : "—" }) +
+      " " +
+      T("introCpc", { chance: chance || "high" }) +
+      (fcPeak ? " " + T("introModels", { value: `+${fcPeak.v.toFixed(1)}`, month: fcPeak.label }) : "");
 
     return { headline, lead, intro, thermos, forecastSummary, st, monthly,
              monthlyVal, sstNowLab, monthLab,
              currentYear: new Date(d.generated_at).getFullYear(),
              probs: d.enso_probabilities, generatedAt: d.generated_at };
-  }, [d]);
+  }, [d, t]);
 
   if (loading && !data) {
     return (
       <main className="min-h-screen bg-white flex items-center justify-center">
-        <p className="text-sm text-gray-600">Loading data…</p>
+        <p className="text-sm text-gray-600">{T("loading")}</p>
       </main>
     );
   }
@@ -179,9 +187,9 @@ export default function App() {
     return (
       <main className="min-h-screen bg-white flex items-center justify-center px-6">
         <div className="max-w-md text-center">
-          <p className="text-base text-gray-900 font-semibold">{error || "No data available."}</p>
+          <p className="text-base text-gray-900 font-semibold">{error || T("noData")}</p>
           <button onClick={() => load()} className="mt-4 border border-gray-300 px-4 py-2 text-sm font-medium hover:border-gray-900">
-            Retry
+            {T("retry")}
           </button>
         </div>
       </main>
@@ -194,8 +202,37 @@ export default function App() {
     <main className="bg-white text-gray-900">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <article className="py-10">
+          {/* language selector — minimal, top right */}
+          <div className="relative flex justify-end">
+            <button
+              type="button"
+              onClick={() => setLangOpen(o => !o)}
+              className="border border-gray-300 px-2.5 py-1 text-xs font-medium hover:border-gray-900"
+              aria-haspopup="listbox"
+            >
+              {LANGS.find(l => l.code === lang)?.short}
+            </button>
+            {langOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setLangOpen(false)} />
+                <div className="absolute end-0 z-20 mt-8 border border-gray-200 bg-white py-1 text-sm shadow-sm">
+                  {LANGS.map(l => (
+                    <button
+                      key={l.code}
+                      type="button"
+                      onClick={() => { setLang(l.code); setLangOpen(false); }}
+                      className={`block w-full px-4 py-1.5 text-start hover:bg-gray-50 ${l.code === lang ? "font-bold text-gray-900" : "text-gray-600"}`}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
           {/* headline + official statement as the intro */}
-          <h1 className="max-w-4xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+          <h1 className="mt-6 max-w-4xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
             {derived.headline}
           </h1>
 
@@ -204,16 +241,16 @@ export default function App() {
               {derived.intro}
             </p>
             <p className="mt-3 text-sm text-gray-500">
-              Based on the official ENSO Diagnostic Discussion (NOAA Climate Prediction Center, {st.issued}).{" "}
+              {T("attribution", { date: st.issued || "" })}{" "}
               <a href={st.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-gray-900">
-                Full statement
+                {T("fullStatement")}
               </a>
             </p>
           </section>
 
           {/* where things stand — plain language, technical names underneath */}
           <section className="mt-12 border-t border-gray-200 pt-8">
-            <h2 className="text-2xl font-bold tracking-tight">Where things stand</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{T("whereStands")}</h2>
             <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-3">
               {derived.thermos.map((t, i) => (
                 <div key={i}>
@@ -232,36 +269,36 @@ export default function App() {
 
           {/* 1 — how bad is it */}
           <section className="mt-16">
-            <h2 className="text-2xl font-bold tracking-tight">How bad is it?</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{T("howBad")}</h2>
             <AlignedComparison monthly={monthly} events={data.comparison.events} />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
-              The three strongest El Niños on record, aligned at the month each event became active. Values: NOAA CPC monthly Niño-3.4 anomaly (ERSST, 1991–2020 mean).
+              {T("badCaption")}
             </p>
           </section>
 
           {/* 2 — what is predicted (observed vs forecast water temperature) */}
           <section className="mt-16">
-            <h2 className="text-2xl font-bold tracking-tight">What is predicted?</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{T("predicted")}</h2>
             <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.forecastSummary}</p>
             <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
-              Six international climate models (NOAA NMME project), issued {data.nino34_forecast?.init || "—"}.
+              {T("predictedCaption", { date: data.nino34_forecast?.init || "—" })}
             </p>
           </section>
 
           {/* 3 — what are the consequences */}
           <section className="mt-16">
-            <h2 className="text-2xl font-bold tracking-tight">What are the consequences?</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{T("consequences")}</h2>
             <ImpactMap />
 
           </section>
 
           {/* 4 — how long does this last */}
           <section className="mt-16">
-            <h2 className="text-2xl font-bold tracking-tight">How long does this last?</h2>
+            <h2 className="text-2xl font-bold tracking-tight">{T("howLong")}</h2>
             <OutlookChart probabilities={derived.probs} generatedAt={generatedAt} />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
-              Official NOAA CPC probability of El Niño per three-month season, {derived.st.issued}.
+              {T("outlookCaption", { date: derived.st.issued || "" })}
             </p>
           </section>
 
@@ -270,11 +307,11 @@ export default function App() {
         {/* footer */}
         <footer className="mt-16 border-t border-gray-200 py-8 text-sm text-gray-500">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span>Data: NOAA CPC · NOAA PSL · GODAS — updated twice a day.</span>
-            <a className="underline underline-offset-2 hover:text-gray-900" href="data.json">raw data</a>
-            <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml">official discussion</a>
-            <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/">model forecast</a>
-            <span className="text-gray-400">— independent project, not affiliated with NOAA</span>
+            <span>{T("footer1")}</span>
+            <a className="underline underline-offset-2 hover:text-gray-900" href="data.json">{T("footerRaw")}</a>
+            <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml">{T("footerDisc")}</a>
+            <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/">{T("footerModel")}</a>
+            <span className="text-gray-400">{T("footerNote")}</span>
           </div>
         </footer>
       </div>

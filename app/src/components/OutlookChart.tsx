@@ -4,6 +4,7 @@
 // ============================================================================
 import { useMemo } from "react";
 import type { SeasonProbability } from "../data";
+import { msg, useI18n } from "../i18n";
 
 interface Props {
   probabilities: SeasonProbability[];
@@ -52,10 +53,11 @@ export function buildOutlookRows(probabilities: SeasonProbability[], generatedAt
 }
 
 export function OutlookChart({ probabilities, generatedAt }: Props) {
+  const { t } = useI18n();
   const rows = useMemo(() => buildOutlookRows(probabilities, generatedAt), [probabilities, generatedAt]);
 
   if (rows.length === 0) {
-    return <p className="text-sm text-gray-600">No official probability forecast published.</p>;
+    return <p className="text-sm text-gray-600">{msg(t, "noForecast")}</p>;
   }
 
   const max = Math.max(...rows.map(r => r.el_nino), 100);

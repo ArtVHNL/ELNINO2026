@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 import * as d3 from "d3";
 import type { IndexValue, ComparisonEvent } from "../data";
+import { msg, useI18n } from "../i18n";
 
 interface Props {
   monthly: IndexValue[];       // monthly Niño-3.4 anomalies (ERSST, official)
@@ -37,7 +38,9 @@ function seriesFor(monthly: IndexValue[], startYear: number, startMonth: number)
 }
 
 export function AlignedComparison({ monthly, events }: Props) {
+  const { t } = useI18n();
   const { refs, refSeries, currentSeries, x, y, gridYs, xTicks, curveText } = useMemo(() => {
+    const T = (k: string, v?: Record<string, string>) => msg(t, k, v);
     const completed = events.filter(e => !e.active);
     const refs = [...completed].sort((a, b) => b.peak - a.peak).slice(0, 3);
     const current = events.find(e => e.active);
@@ -63,7 +66,7 @@ export function AlignedComparison({ monthly, events }: Props) {
     const xTicks = [0, 3, 6, 9, 12, 15, 17].map(k => ({ k, py: x(k), label: k === 0 ? "onset" : `+${k}m` }));
 
     // conclusion: current at +3 months vs mean of refs at +3
-    let curveText = "The event is still in its first months.";
+    let curveText = T("curveBelow", { year: "2026", diff: "0.0" });
     const curIdx = 3;
     const refIdx = 3;
     const cv = curVals[curIdx];
@@ -71,14 +74,13 @@ export function AlignedComparison({ monthly, events }: Props) {
     if (cv !== null && Number.isFinite(cv) && rv.length > 1) {
       const mean = rv.reduce((a, b) => a + b, 0) / rv.length;
       const diff = cv - mean;
-      curveText =
-        diff >= 0
-          ? `Three months in, 2026-27 runs ${Math.abs(diff).toFixed(2)}°C above the average of the record events at the same stage.`
-          : `Three months in, 2026-27 runs ${Math.abs(diff).toFixed(2)}°C below the average of the record events at the same stage.`;
+      curveText = diff >= 0
+        ? T("curveAbove", { year: String(current?.start || "2026"), diff: Math.abs(diff).toFixed(2) })
+        : T("curveBelow", { year: String(current?.start || "2026"), diff: Math.abs(diff).toFixed(2) });
     }
 
     return { refs, refSeries, currentSeries: curVals, x, y, gridYs, xTicks, curveText };
-  }, [monthly, events]);
+  }, [monthly, events, t]);
 
   const pathOf = (vals: (number | null)[]) =>
     "M" + vals.map((v, i) => (v === null ? null : `${x(i + X_MIN)},${y(v)}`)).filter(Boolean).join(" L");
@@ -132,7 +134,7 @@ export function AlignedComparison({ monthly, events }: Props) {
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-700">
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[3px] w-8 shrink-0 bg-[#DC2626]" /> 2026–27 (current)
+          <span className="inline-block h-[3px] w-8 shrink-0 bg-[#DC2626]" /> {msg(t, "legendCurrent")}
         </span>
         {refSeries.map(r => (
           <span key={r.label} className="inline-flex items-center gap-2">
@@ -140,7 +142,7 @@ export function AlignedComparison({ monthly, events }: Props) {
           </span>
         ))}
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[3px] w-8 shrink-0 border-t-2 border-dashed border-[#9CA3AF]" /> Climatological mean
+          <span className="inline-block h-[3px] w-8 shrink-0 border-t-2 border-dashed border-[#9CA3AF]" /> {msg(t, "legendMean")}
         </span>
       </div>
     </div>
