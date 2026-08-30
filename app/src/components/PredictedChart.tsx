@@ -99,13 +99,13 @@ export function PredictedChart({ observed, forecast }: Props) {
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-700">
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[2px] w-8 bg-[#111827]" /> observed (measured)
+          <span className="inline-block h-[2px] w-8 bg-[#111827]" /> Observed (measured)
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[3px] w-8 bg-[#DC2626]" /> forecast (6-model mean)
+          <span className="inline-block h-[3px] w-8 bg-[#DC2626]" /> Forecast (6-model mean)
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-3 w-8 bg-[#DC2626]/10 border border-[#DC2626]/30" /> model range
+          <span className="inline-block h-3 w-8 bg-[#DC2626]/10 border border-[#DC2626]/30" /> Model range
         </span>
       </div>
     </div>

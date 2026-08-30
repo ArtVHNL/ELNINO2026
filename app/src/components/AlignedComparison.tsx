@@ -37,7 +37,7 @@ function seriesFor(monthly: IndexValue[], startYear: number, startMonth: number)
 }
 
 export function AlignedComparison({ monthly, events }: Props) {
-  const { refs, refSeries, refEnds, currentSeries, x, y, gridYs, xTicks, curveText } = useMemo(() => {
+  const { refs, refSeries, currentSeries, x, y, gridYs, xTicks, curveText } = useMemo(() => {
     const completed = events.filter(e => !e.active);
     const refs = [...completed].sort((a, b) => b.peak - a.peak).slice(0, 3);
     const current = events.find(e => e.active);
@@ -77,14 +77,7 @@ export function AlignedComparison({ monthly, events }: Props) {
           : `Three months in, 2026-27 runs ${Math.abs(diff).toFixed(2)}°C below the average of the record events at the same stage.`;
     }
 
-    const endLabel = (vals: (number | null)[]) => {
-      for (let i = vals.length - 1; i >= 0; i--) {
-        if (vals[i] !== null) return { x: x(i + X_MIN), y: y(vals[i] as number) };
-      }
-      return null;
-    };
-    const refEnds = refSeries.map(r => endLabel(r.vals!));
-    return { refs, refSeries, refEnds, currentSeries: curVals, x, y, gridYs, xTicks, curveText };
+    return { refs, refSeries, currentSeries: curVals, x, y, gridYs, xTicks, curveText };
   }, [monthly, events]);
 
   const pathOf = (vals: (number | null)[]) =>
@@ -126,22 +119,10 @@ export function AlignedComparison({ monthly, events }: Props) {
             })()}
           </g>
         ))}
-        {refEnds.map((p, i) => p && (
-          <text key={i} x={p.x - 6} y={p.y + 3} textAnchor="end" fontSize="10" fontWeight="600" fill={refSeries[i].color} fontFamily="inherit">
-            {refSeries[i].label}
-          </text>
-        ))}
 
         {/* current event */}
         {curPath && <path d={curPath} fill="none" stroke="#DC2626" strokeWidth="3" strokeLinejoin="round" />}
-        {lastPt && (
-          <g>
-            <circle cx={lastPt.px} cy={lastPt.py} r="3.5" fill="#DC2626" />
-            <text x={lastPt.px + 8} y={lastPt.py + 4} fontSize="10" fontWeight="700" fill="#DC2626" fontFamily="inherit">
-              2026–27 (now)
-            </text>
-          </g>
-        )}
+        {lastPt && <circle cx={lastPt.px} cy={lastPt.py} r="3.5" fill="#DC2626" />}
 
         {xTicks.map((t, i) => (
           <text key={i} x={t.py} y={H - 8} textAnchor="middle" fontSize="10" fill="#6B7280" fontFamily="inherit">
@@ -159,7 +140,7 @@ export function AlignedComparison({ monthly, events }: Props) {
           </span>
         ))}
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[3px] w-8 shrink-0 border-t-2 border-dashed border-[#9CA3AF]" /> climatological mean (0 °C)
+          <span className="inline-block h-[3px] w-8 shrink-0 border-t-2 border-dashed border-[#9CA3AF]" /> Climatological mean
         </span>
       </div>
     </div>
