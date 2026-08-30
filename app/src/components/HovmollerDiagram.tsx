@@ -37,19 +37,6 @@ export const HovmollerDiagram = React.memo(({ chartData }: HovmollerDiagramProps
     ? chartData.thermocline_depth[monthIdx]
     : undefined;
 
-  // Thermocline polyline (skip null segments)
-  const thermoPath = useMemo(() => {
-    if (!thermo) return "";
-    const pts: string[] = [];
-    thermo.forEach((d, i) => {
-      if (d === null || d === undefined) return;
-      const x = xScaleSafe(lons[i]);
-      const y = yScaleSafe(d);
-      pts.push(pts.length === 0 ? `M${x},${y}` : `L${x},${y}`);
-    });
-    return pts.join(" ");
-  }, [thermo, lons]);
-
   const width = 600;
   const height = 300;
   const margin = { top: 20, right: 35, bottom: 45, left: 45 };
@@ -62,6 +49,19 @@ export const HovmollerDiagram = React.memo(({ chartData }: HovmollerDiagramProps
     .range([margin.top, height - margin.bottom]), [depths]);
   const xScaleSafe = (v: number) => rawXScale(v);
   const yScaleSafe = (v: number) => rawYScale(v);
+
+  // Thermocline polyline (skip null segments)
+  const thermoPath = useMemo(() => {
+    if (!thermo) return "";
+    const pts: string[] = [];
+    thermo.forEach((d, i) => {
+      if (d === null || d === undefined) return;
+      const x = xScaleSafe(lons[i]);
+      const y = yScaleSafe(d);
+      pts.push(pts.length === 0 ? `M${x},${y}` : `L${x},${y}`);
+    });
+    return pts.join(" ");
+  }, [thermo, lons]);
 
   const {
     xScale,

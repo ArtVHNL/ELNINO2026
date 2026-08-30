@@ -256,6 +256,27 @@ export default function App() {
     return getSimulatedData(currentScenario, liveData);
   }, [liveData, currentScenario]);
 
+  // Live source integrity summary — pure derivation, null-safe (must stay above the early return!)
+  const sourceCounts = useMemo(() => {
+    const counts = { live: 0, derived: 0, synthetic: 0 };
+    if (!displayData?.sources) return counts;
+    Object.values(displayData.sources).forEach(src => {
+      if (src === "live") counts.live += 1;
+      else if (src === "derived") counts.derived += 1;
+      else if (src === "synthetic") counts.synthetic += 1;
+    });
+    return counts;
+  }, [displayData]);
+
+  const freshnessLabel = useMemo(() => {
+    if (!displayData?.generated_at) return "—";
+    const updated = new Date(displayData.generated_at);
+    const hours = Math.max(0, Math.round((Date.now() - updated.getTime()) / 3_600_000));
+    if (hours < 1) return "updated <1h ago";
+    if (hours < 24) return `updated ${hours}h ago`;
+    return `updated ${Math.floor(hours / 24)}d ago`;
+  }, [displayData]);
+
   // Callback: force refresh
   const handleRefresh = useCallback(() => {
     setIsLoading(true);
@@ -332,26 +353,6 @@ export default function App() {
   const currentSOI = sop.length > 0 ? sop[sop.length - 1].value : 0;
   const currentWWV = wvp.length > 0 ? wvp[wvp.length - 1].value : 0;
   const lastONI = oni.length > 0 ? oni[oni.length - 1].value : 0;
-  const sourceCounts = useMemo(() => {
-    const counts = { live: 0, derived: 0, synthetic: 0 };
-    if (!displayData?.sources) return counts;
-    Object.values(displayData.sources).forEach(src => {
-      if (src === "live") counts.live += 1;
-      else if (src === "derived") counts.derived += 1;
-      else if (src === "synthetic") counts.synthetic += 1;
-    });
-    return counts;
-  }, [displayData]);
-
-  const freshnessLabel = useMemo(() => {
-    if (!displayData?.generated_at) return "—";
-    const updated = new Date(displayData.generated_at);
-    const hours = Math.max(0, Math.round((Date.now() - updated.getTime()) / 3_600_000));
-    if (hours < 1) return "updated <1h ago";
-    if (hours < 24) return `updated ${hours}h ago`;
-    return `updated ${Math.floor(hours / 24)}d ago`;
-  }, [displayData]);
-
   const dataSourceLabel = dataError ? 'ERROR' : displayData?.sources?.nino34 === 'live' ? 'LIVE NOAA' : 'PARTIAL';
   const dataSourceColor = dataError ? 'text-red-400' : displayData?.sources?.nino34 === 'live' ? 'text-green-400' : 'text-amber-400';
 
