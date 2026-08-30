@@ -1,35 +1,40 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-08-30T14:49:52Z",
+ "generated_at": "2026-08-30T15:08:17Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 879,
+   "latency_ms": 619,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
+  },
+  "cpc_ersst5": {
+   "source": "live",
+   "latency_ms": 520,
+   "url": "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 1038,
+   "latency_ms": 817,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 434,
+   "latency_ms": 441,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 430,
+   "latency_ms": 440,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 454,
+   "latency_ms": 457,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 431,
+   "latency_ms": 433,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "cpc_probabilities": {
@@ -39,23 +44,23 @@
   },
   "godas": {
    "source": "live",
-   "latency_ms": 53364,
+   "latency_ms": 86352,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
   },
   "olr": {
    "source": "live",
-   "latency_ms": 4075,
+   "latency_ms": 5564,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
   },
   "plume": {
    "source": "synthetic",
-   "latency_ms": 10,
+   "latency_ms": 11,
    "url": "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/",
    "note": "IRI data library requires login; official plume figure linked instead"
   },
   "wind850": {
    "source": "synthetic",
-   "latency_ms": 8,
+   "latency_ms": 6,
    "note": "NCEP/NCAR reanalysis via IRI requires login; schematic field"
   },
   "precip": {
@@ -65,14 +70,14 @@
   }
  },
  "summary": {
-  "endpoints_total": 12,
-  "live": 9,
+  "endpoints_total": 13,
+  "live": 10,
   "derived": 0,
   "synthetic": 3,
   "error": 0
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1384775
+  "data.json_size_bytes": 1484510
  }
 }

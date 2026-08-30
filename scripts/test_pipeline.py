@@ -110,6 +110,24 @@ def test_sstoi_synthetic_on_empty(monkeypatch):
     assert meta["source"] == "synthetic"
 
 
+def make_ersst(n=40):
+    lines = [" YR   MON  NINO1+2  ANOM   NINO3    ANOM   NINO4    ANOM   NINO3.4  ANOM"]
+    for i in range(n):
+        y, m = divmod(i, 12)
+        lines.append(f"{1950 + y}  {m + 1:2d}   23.00    0.10   25.00    0.20   28.00    0.30   26.00    0.40")
+    lines.append("2026   6   25.94    2.82   28.33    1.71   30.19    1.22   29.17    1.44")
+    return "\n".join(lines) + "\n"
+
+
+def test_ersst5_parser(monkeypatch):
+    monkeypatch.setattr(fd, "fetch_text", lambda url, **kw: make_ersst())
+    data, meta = fd.fetch_cpc_ersst5()
+    assert meta["source"] == "live"
+    assert data[-1] == {"date": "2026-06-01", "value": 1.44}
+    assert data[0] == {"date": "1950-01-01", "value": 0.4}
+    assert len(data) == 41
+
+
 def test_weekly_parser(monkeypatch):
     monkeypatch.setattr(fd, "fetch_text", lambda url, **kw: make_weekly())
     data, meta = fd.fetch_cpc_weekly()

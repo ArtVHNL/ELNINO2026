@@ -56,9 +56,7 @@ export function OutlookChart({ probabilities, generatedAt }: Props) {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-xs text-gray-500">
-        Probability of El Niño, official NOAA CPC forecast (broadcast with the ENSO Diagnostic Discussion).
-      </p>
+
     </div>
   );
 }

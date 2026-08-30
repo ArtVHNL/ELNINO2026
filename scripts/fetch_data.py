@@ -142,6 +142,36 @@ def fetch_cpc_sstoi() -> tuple[dict, dict]:
 
 
 # --------------------------------------------------------------------------
+# 1b. CPC ERSST v5 Niño indices (1991–2020 base) — the official series used in
+#     the ENSO Diagnostic Discussion and for the ONI
+# --------------------------------------------------------------------------
+CPC_ERSST5_URL = "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
+
+
+def fetch_cpc_ersst5() -> tuple[list[dict], dict]:
+    """Monthly Niño-3.4 anomaly, ERSST v5, 1991–2020 base (1950–present)."""
+    text = fetch_text(CPC_ERSST5_URL)
+    if not text:
+        return [], {"source": "synthetic", "error": "fetch failed"}
+    records = []
+    for line in text.strip().splitlines():
+        parts = line.split()
+        if len(parts) < 10 or not parts[0].isdigit():
+            continue
+        year, month = int(parts[0]), int(parts[1])
+        try:
+            val = float(parts[9])  # NINO3.4 ANOM column
+        except (ValueError, IndexError):
+            continue
+        if -10 < val < 10:
+            records.append({"date": f"{year}-{month:02d}-01", "value": round(val, 2)})
+    if len(records) < 24:
+        return [], {"source": "synthetic", "error": f"only {len(records)} rows"}
+    log.info("  OK: %d rows (latest %s)", len(records), records[-1]["date"])
+    return records, {"source": "live", "url": CPC_ERSST5_URL}
+
+
+# --------------------------------------------------------------------------
 # 2. CPC wksst9120.for — weekly Niño region SST anomalies (fixed width)
 # --------------------------------------------------------------------------
 CPC_WKST_URL = "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
@@ -342,6 +372,10 @@ def fetch_cpc_ensodisc() -> tuple[dict, dict]:
 
     if not status:
         return {}, {"source": "synthetic", "error": "status line not found"}
+
+    if synopsis:
+        synopsis = re.sub(r"\[Figs?\.?\s*[\d\s-]+\]", "", synopsis)
+        synopsis = re.sub(r"\s{2,}", " ", synopsis).strip()
 
     result = {
         "advisory": status,
@@ -938,6 +972,8 @@ def main() -> int:
 
     log.info("[1/11] CPC sstoi (monthly Niño regions)...")
     run("cpc_sstoi", fetch_cpc_sstoi)
+    log.info("[1b/13] CPC ERSST v5 Niño indices (official series)...")
+    run("cpc_ersst5", fetch_cpc_ersst5)
     log.info("[2/11] CPC wksst (weekly Niño regions)...")
     run("cpc_weekly", fetch_cpc_weekly)
     log.info("[3/11] CPC ONI...")
@@ -979,7 +1015,7 @@ def main() -> int:
         for i, m in enumerate(godas.get("months", [])):
             wwv_monthly.append({"date": f"{m}-15", "value": godas["wwv_anomaly"][i]})
 
-    nino34_monthly = sstoi.get("nino34", [])
+    nino34_monthly = endpoints.get("cpc_ersst5", sstoi.get("nino34", []))
     nino34_weekly = weekly.get("nino34", [])
     oni_monthly = oni
     soi_monthly = soi
@@ -1006,6 +1042,7 @@ def main() -> int:
         "schema_version": VERSION,
         "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "nino34_monthly": nino34_monthly,
+        "nino_regions_monthly_oi": sstoi,
         "nino34_weekly": nino34_weekly[-52:],
         "oni_monthly": oni_monthly,
         "soi_monthly": soi_monthly,
@@ -1040,7 +1077,8 @@ def main() -> int:
         "current": current,
         "comparison": event_comparison(oni_monthly) if oni_monthly else {"events": []},
         "sources": {
-            "nino34": status.get("cpc_sstoi", {}).get("source"),
+            "nino34": status.get("cpc_ersst5", {}).get("source"),
+            "nino34_oi": status.get("cpc_sstoi", {}).get("source"),
             "nino34_weekly": status.get("cpc_weekly", {}).get("source"),
             "oni": status.get("cpc_oni", {}).get("source"),
             "soi": status.get("cpc_soi", {}).get("source"),
