@@ -93,18 +93,7 @@ jobs:
           echo "## Pipeline Run: $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
           echo "Exit code: ${{ steps.pipeline.outputs.exit_code }}" >> "$GITHUB_STEP_SUMMARY"
           if [ -f meta.json ]; then
-            python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-import json
-try:
-    m = json.load(open("meta.json"))
-    s = m.get("summary", {})
-    print(f"Endpoints: {s.get('endpoints_total')} total — {s.get('live')} live, "
-          f"{s.get('derived')} derived, {s.get('synthetic')} synthetic, {s.get('error')} error")
-    for name, st in m.get("health", {}).items():
-        print(f"- {name}: {st.get('source')}" + (f" ({st.get('error', '')[:80]})" if st.get("error") else ""))
-except Exception as e:
-    print(f"meta.json unreadable: {e}")
-EOF
+            python3 scripts/pipeline_summary.py >> "$GITHUB_STEP_SUMMARY" || true
           fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -30 pipeline_output.txt >> "$GITHUB_STEP_SUMMARY"
