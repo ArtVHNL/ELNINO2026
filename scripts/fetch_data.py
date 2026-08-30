@@ -475,7 +475,8 @@ def fetch_godas(now: datetime, out_dir: Path) -> tuple[dict, dict]:
                           slice(lo_wwv[0], lo_wwv[-1] + 1)))
         if wwv is None:
             continue
-        wwv_box = np.nanmean(wwv, axis=(2, 3))  # [time, depth] (NaN-safe)
+        wwv_c = wwv - 273.15  # Kelvin -> °C
+        wwv_box = np.nanmean(wwv_c, axis=(2, 3))  # [time, depth] (NaN-safe)
 
         for t in range(ntime):
             # time in GODAS files: days since 1800-01-01 (approx); derive month label

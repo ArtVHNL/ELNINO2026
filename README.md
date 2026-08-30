@@ -5,7 +5,13 @@ A fully automated, publicly accessible climate monitoring dashboard tracking the
 indices, ocean reanalysis fields, international model forecasts and an
 AI-generated expert briefing into one continuously updated operational picture.
 
-**Live site:** https://ArtVHNL.github.io/ELNINO2026/ _(once deployed)_
+**Live site:** https://ArtVHNL.github.io/ELNINO2026/
+
+[![Pipeline](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FArtVHNL%2FELNINO2026%2Fmain%2Fmeta.json&query=%24.summary.live&label=endpoints%20live&color=success)](https://github.com/ArtVHNL/ELNINO2026/actions/workflows/update_data.yml)
+[![Synthetic](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FArtVHNL%2FELNINO2026%2Fmain%2Fmeta.json&query=%24.summary.synthetic&label=fallback%20%28synthetic%29&color=orange)](meta.json)
+[![Last update](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FArtVHNL%2FELNINO2026%2Fmain%2Fmeta.json&query=%24.generated_at&label=last%20update&color=blue)](meta.json)
+[![Tests](https://img.shields.io/badge/tests-14%20passing-brightgreen)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 

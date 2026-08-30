@@ -1,56 +1,56 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-08-30T13:21:52Z",
+ "generated_at": "2026-08-30T14:02:17Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 1038,
+   "latency_ms": 649,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 950,
+   "latency_ms": 1123,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 462,
+   "latency_ms": 569,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 424,
+   "latency_ms": 577,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 444,
+   "latency_ms": 746,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 485,
+   "latency_ms": 597,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "godas": {
    "source": "live",
-   "latency_ms": 53241,
+   "latency_ms": 56057,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
   },
   "olr": {
    "source": "live",
-   "latency_ms": 4115,
+   "latency_ms": 3807,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
   },
   "plume": {
    "source": "synthetic",
-   "latency_ms": 7,
+   "latency_ms": 8,
    "url": "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/",
    "note": "IRI data library requires login; official plume figure linked instead"
   },
   "wind850": {
    "source": "synthetic",
-   "latency_ms": 4,
+   "latency_ms": 5,
    "note": "NCEP/NCAR reanalysis via IRI requires login; schematic field"
   },
   "precip": {
@@ -68,6 +68,6 @@
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1463487
+  "data.json_size_bytes": 1383496
  }
 }

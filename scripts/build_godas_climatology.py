@@ -78,9 +78,9 @@ def main() -> int:
     n_months = 12
     n_depth = len(depth_arr)
     hm_sum = np.zeros((n_months, n_depth, len(lo_hm)))
-    hm_cnt = np.zeros(n_months, dtype=int)
+    hm_cnt = np.zeros((n_months, n_depth, len(lo_hm)))
     wwv_sum = np.zeros((n_months, n_depth))
-    wwv_cnt = np.zeros(n_months, dtype=int)
+    wwv_cnt = np.zeros((n_months, n_depth))
 
     for year in YEARS:
         url = GODAS_BASE.format(year=year)
@@ -104,7 +104,7 @@ def main() -> int:
             wwv_cnt[t] += np.isfinite(wwv_mean).astype(np.float64)
         log.info("  %d done in %.1fs (months=%d)", year, time.time() - t0, ntime)
 
-    ok_months = [i for i in range(12) if hm_cnt[i] >= 20]
+    ok_months = [i for i in range(12) if float(np.median(hm_cnt[i])) >= 20]
     if len(ok_months) < 12:
         log.warning("Only %d months have sufficient coverage: %s", len(ok_months), ok_months)
 

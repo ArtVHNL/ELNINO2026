@@ -8,7 +8,9 @@ interface HovmollerDiagramProps {
     lon: number[];
     depth: number[];
     lat: number[];
-    anomaly: number[][];
+    months?: string[];
+    anomaly: number[][][] | number[][];
+    thermocline_depth?: (number | null)[][];
   };
 }
 
@@ -22,11 +24,44 @@ export const HovmollerDiagram = React.memo(({ chartData }: HovmollerDiagramProps
     visible: boolean;
   }>({ mouseX: 0, mouseY: 0, lonVal: 0, depthVal: 0, anomalyVal: 0, visible: false });
 
-  const { lon: lons, depth: depths, anomaly } = chartData;
+  const { lon: lons, depth: depths } = chartData;
+
+  // Pipeline v3 stores [month][depth][lon]; select the latest month for display
+  const is3D = Array.isArray(chartData.anomaly?.[0]?.[0]);
+  const monthIdx = is3D ? (chartData.anomaly as number[][][]).length - 1 : 0;
+  const anomaly: number[][] = is3D
+    ? (chartData.anomaly as number[][][])[monthIdx]
+    : (chartData.anomaly as number[][]);
+  const monthLabel = is3D ? chartData.months?.[monthIdx] : undefined;
+  const thermo = is3D && chartData.thermocline_depth
+    ? chartData.thermocline_depth[monthIdx]
+    : undefined;
+
+  // Thermocline polyline (skip null segments)
+  const thermoPath = useMemo(() => {
+    if (!thermo) return "";
+    const pts: string[] = [];
+    thermo.forEach((d, i) => {
+      if (d === null || d === undefined) return;
+      const x = xScaleSafe(lons[i]);
+      const y = yScaleSafe(d);
+      pts.push(pts.length === 0 ? `M${x},${y}` : `L${x},${y}`);
+    });
+    return pts.join(" ");
+  }, [thermo, lons]);
 
   const width = 600;
   const height = 300;
   const margin = { top: 20, right: 35, bottom: 45, left: 45 };
+
+  const rawXScale = useMemo(() => d3.scaleLinear()
+    .domain([Math.min(...lons), Math.max(...lons)])
+    .range([margin.left, width - margin.right]), [lons]);
+  const rawYScale = useMemo(() => d3.scaleLinear()
+    .domain([Math.min(...depths), Math.max(...depths)])
+    .range([margin.top, height - margin.bottom]), [depths]);
+  const xScaleSafe = (v: number) => rawXScale(v);
+  const yScaleSafe = (v: number) => rawYScale(v);
 
   const {
     xScale,
@@ -38,13 +73,8 @@ export const HovmollerDiagram = React.memo(({ chartData }: HovmollerDiagramProps
     lonTicks,
     depthTicks
   } = useMemo(() => {
-    const xScale = d3.scaleLinear()
-      .domain([Math.min(...lons), Math.max(...lons)])
-      .range([margin.left, width - margin.right]);
-
-    const yScale = d3.scaleLinear()
-      .domain([Math.min(...depths), Math.max(...depths)])
-      .range([margin.top, height - margin.bottom]);
+    const xScale = rawXScale;
+    const yScale = rawYScale;
 
     const colorScale = d3.scaleDiverging<string>(d => {
       if (d < 0.5) {
@@ -54,7 +84,7 @@ export const HovmollerDiagram = React.memo(({ chartData }: HovmollerDiagramProps
         const t = (d - 0.5) * 2;
         return d3.interpolateLab("#0f172a", "#FF4E4E")(t); // back dark to deep crimson
       }
-    }).domain([-1.5, 0.0, 3.5]);
+    }).domain([-3.0, 0.0, 6.0]);
 
     const cellSizeX = (width - margin.left - margin.right) / lons.length;
     const cellSizeY = (height - margin.top - margin.bottom) / depths.length;
@@ -204,7 +234,7 @@ export const HovmollerDiagram = React.memo(({ chartData }: HovmollerDiagramProps
           Oceanic Subsurface Thermal Profile
         </span>
         <span className="text-[9px] font-mono bg-[#111827] px-2 py-0.5 rounded text-gray-400 border border-white/5 uppercase">
-          120°E To 80°W Transect
+          120°E To 80°W Transect{monthLabel ? ` · ${monthLabel}` : ""}
         </span>
       </div>
 
@@ -236,6 +266,21 @@ export const HovmollerDiagram = React.memo(({ chartData }: HovmollerDiagramProps
               <path key={idx} d={contour.d} />
             ))}
           </g>
+
+          {/* Thermocline (20°C isotherm depth) overlay */}
+          {thermoPath && (
+            <g fill="none">
+              <path d={thermoPath} stroke="#f59e0b" strokeWidth="1.6" strokeDasharray="5, 3" opacity="0.85" />
+              <text
+                x={width - margin.right - 4}
+                y={12}
+                textAnchor="end"
+                className="text-[8px] font-mono fill-amber-400/90 font-bold"
+              >
+                thermocline (20°C)
+              </text>
+            </g>
+          )}
 
           {/* Isotherm Labels */}
           {isothermLabels.map((lbl, idx) => (

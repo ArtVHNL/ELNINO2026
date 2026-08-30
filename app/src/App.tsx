@@ -956,7 +956,7 @@ export default function App() {
             <div className="flex items-center justify-between text-[9px] text-gray-500 font-mono border-t border-white/5 pt-2">
               <div className="flex items-center gap-2">
                 <span className="w-4 h-2 bg-gradient-to-r from-blue-600 via-slate-900 to-red-650 border border-white/10" />
-                <span>Zero-centered divergent heatmap (-1.5°C Blue to +3.5°C Crimson)</span>
+                <span>Zero-centered divergent heatmap (−3.0°C Blue to +6.0°C Crimson) · GODAS</span>
               </div>
               <span>Equatorial Depth: 5m to 295m</span>
             </div>
