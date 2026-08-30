@@ -167,7 +167,7 @@ export default function App() {
     const intro =
       T("introWarm", { month: monthLab, value: monthlyVal !== null ? fmtSigned(monthlyVal) : "—" }) +
       " " +
-      T("introCpc", { chance: chance || "high" }) +
+      T("introCpc", { chance: lang === "en" ? (chance || "high") : T("chance90") }) +
       (fcPeak ? " " + T("introModels", { value: `+${fcPeak.v.toFixed(1)}`, month: fcPeak.label }) : "");
 
     return { headline, lead, intro, thermos, forecastSummary, st, monthly,
