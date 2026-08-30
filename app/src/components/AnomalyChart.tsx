@@ -95,15 +95,15 @@ export function AnomalyChart({ monthly, currentYear, referenceYear }: Props) {
         ))}
       </svg>
 
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700">
+      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-700">
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[3px] w-8 bg-[#DC2626]" /> {currentYear} (current year)
+          <span className="inline-block h-[3px] w-8 shrink-0 bg-[#DC2626]" /> {currentYear} (current year)
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[2px] w-8 bg-[#D1D5DB]" /> {referenceYear} (previous record)
+          <span className="inline-block h-[3px] w-8 shrink-0 bg-[#D1D5DB]" /> {referenceYear} (previous record)
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-0 w-8 border-t border-dashed border-[#9CA3AF]" /> climatological mean (0 °C anomaly)
+          <span className="inline-block h-[3px] w-8 shrink-0 border-t-2 border-dashed border-[#9CA3AF]" /> climatological mean (0 °C)
         </span>
       </div>
     </div>

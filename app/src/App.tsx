@@ -188,13 +188,13 @@ export default function App() {
           {/* where things stand — plain language, technical names underneath */}
           <section className="mt-12 border-t border-gray-200 pt-8">
             <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">Where things stand</h2>
-            <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-3">
+            <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-10 md:grid-cols-3">
               {derived.statements.map(st_ => (
-                <div key={st_.head}>
+                <div key={st_.head} className="flex flex-col">
                   <div className="h-[3px] w-6 bg-[#DC2626]" />
-                  <div className="mt-3 text-xs text-gray-500">{st_.head}</div>
-                  <div className="mt-1 text-3xl font-bold tracking-tight">{st_.value}</div>
-                  <div className="mt-1 text-xs text-gray-400">{st_.sub}</div>
+                  <div className="mt-3 min-h-4 text-xs text-gray-500">{st_.head}</div>
+                  <div className="mt-2 text-3xl font-bold tracking-tight tabular-nums">{st_.value}</div>
+                  <div className="mt-2 min-h-8 text-xs leading-4 text-gray-400">{st_.sub}</div>
                 </div>
               ))}
             </div>
@@ -206,7 +206,7 @@ export default function App() {
           {/* 1 — how bad is it */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How bad is it?</h2>
-            <p className="mt-1 text-base text-gray-600">{derived.cmpText}</p>
+            <p className="mt-1 max-w-3xl text-base text-gray-600">{derived.cmpText}</p>
             <AnomalyChart monthly={monthly} currentYear={currentYear} referenceYear={derived.refYear} />
             <p className="mt-3 max-w-3xl text-sm text-gray-500">
               Monthly Niño-3.4 anomaly, °C (official CPC ERSST series, 1991–2020 mean). {derived.refYear} was the strongest previous event.
@@ -255,12 +255,12 @@ export default function App() {
 
         {/* footer */}
         <footer className="mt-16 border-t border-gray-200 py-8 text-sm text-gray-500">
-          <p>
-            Data: NOAA CPC · NOAA PSL · GODAS — updated twice a day.{" "}
-            <a className="underline underline-offset-2" href="data.json">raw data</a> ·{" "}
-            <a className="underline underline-offset-2" target="_blank" rel="noopener noreferrer" href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml">official discussion</a> ·{" "}
-            <a className="underline underline-offset-2" target="_blank" rel="noopener noreferrer" href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/">model forecast</a>
-          </p>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span>Data: NOAA CPC · NOAA PSL · GODAS — updated twice a day.</span>
+            <a className="underline underline-offset-2 hover:text-gray-900" href="data.json">raw data</a>
+            <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml">official discussion</a>
+            <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/">model forecast</a>
+          </div>
           <p className="mt-2 text-xs text-gray-400">Independent monitoring project, not affiliated with NOAA.</p>
         </footer>
       </div>
