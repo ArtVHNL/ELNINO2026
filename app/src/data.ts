@@ -68,6 +68,8 @@ export interface ComparisonEvent {
   peak: number;
   peak_season: string;
   peak_year?: number;
+  start_month?: number;
+  peak_month?: number;
   label: string;
   category: string;
   active?: boolean;

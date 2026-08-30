@@ -218,6 +218,8 @@ def fetch_cpc_weekly() -> tuple[dict, dict]:
 CPC_ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
 SEASONS = ["DJF", "JFM", "FMA", "MAM", "AMJ", "MJJ", "JJA", "JAS", "ASO", "SON", "OND", "NDJ"]
 SEASONS_3 = ["JAS", "ASO", "SON", "OND", "NDJ", "DJF", "JFM", "FMA", "MAM"]
+SEASON_MID_MONTH = {"DJF": 1, "JFM": 2, "FMA": 3, "MAM": 4, "AMJ": 5, "MJJ": 6,
+                    "JJA": 7, "JAS": 8, "ASO": 9, "SON": 10, "OND": 11, "NDJ": 12}
 
 
 def fetch_cpc_oni() -> tuple[list, dict]:
@@ -917,12 +919,15 @@ def event_comparison(oni: list[dict]) -> dict:
         active = rec["value"] >= 0.5
         if active and cur is None:
             cur = {"start": f"{rec['year']}", "peak": rec["value"],
-                   "peak_season": rec["season"], "peak_year": rec["year"]}
+                   "peak_season": rec["season"], "peak_year": rec["year"],
+                   "start_month": SEASON_MID_MONTH.get(rec["season"], 6),
+                   "peak_month": SEASON_MID_MONTH.get(rec["season"], 6)}
         elif active and cur is not None:
             if rec["value"] > cur["peak"]:
                 cur["peak"] = rec["value"]
                 cur["peak_season"] = rec["season"]
                 cur["peak_year"] = rec["year"]
+                cur["peak_month"] = SEASON_MID_MONTH.get(rec["season"], 6)
         elif not active and cur is not None:
             cur["end"] = f"{rec['year']}"
             events.append(cur)

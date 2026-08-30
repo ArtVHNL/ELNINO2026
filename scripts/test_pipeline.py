@@ -251,6 +251,7 @@ def test_event_comparison_merged_peak_year():
     ]
     ev = fd.event_comparison(oni)["events"][0]
     assert ev["peak_year"] == 2015
+    assert ev["peak_month"] == 12  # NDJ middle month
     assert ev["label"] == "2015–2016"
     assert ev["peak"] == 2.6
 

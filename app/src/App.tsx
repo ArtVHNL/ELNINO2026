@@ -4,7 +4,7 @@
 // ============================================================================
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnsoDashboardData, fetchLiveEnsoData, ComparisonEvent } from "./data";
-import { AnomalyChart } from "./components/AnomalyChart";
+import { AlignedComparison } from "./components/AlignedComparison";
 import { ImpactMap } from "./components/ImpactMap";
 import { OutlookChart } from "./components/OutlookChart";
 import { PredictedChart } from "./components/PredictedChart";
@@ -129,25 +129,6 @@ export default function App() {
       },
     ];
 
-    // --- chart 1 conclusion (same official series on both sides)
-    const refSeries = new Map<number, number>();
-    monthly.forEach(r => {
-      const m = r.date.match(/^(\d{4})-(\d{2})/);
-      if (m && parseInt(m[1], 10) === refYear) refSeries.set(parseInt(m[2], 10), r.value);
-    });
-    let cmpText = `${refYear} record-year comparison`;
-    if (monthlyLatest) {
-      const mIdx = new Date(monthlyLatest.date + "T00:00:00Z").getUTCMonth() + 1;
-      const refVal = refSeries.get(mIdx);
-      if (refVal !== undefined) {
-        const diff = monthlyLatest.value - refVal;
-        cmpText =
-          diff >= 0
-            ? `2026 runs ${Math.abs(diff).toFixed(1)}°C above the ${monthLab} ${refYear} value (${refYear}: strongest previous event)`
-            : `2026 is ${Math.abs(diff).toFixed(1)}°C below the ${monthLab} ${refYear} value (${refYear}: strongest previous event)`;
-      }
-    }
-
     // --- forecast summary (what the models predict)
     const fc = d.nino34_forecast;
     let forecastSummary = "The water temperature forecast is not available right now.";
@@ -174,7 +155,7 @@ export default function App() {
       ` The U.S. Climate Prediction Center keeps an El Niño Advisory and puts the chance of a very strong event this fall and winter ${chance || "high"}.` +
       (fcPeak ? ` Six international climate models expect the water temperature to peak at +${fcPeak.v.toFixed(1)}°C around ${fcPeak.label}.` : "");
 
-    return { headline, lead, intro, statements, refYear, cmpText, forecastSummary, st, monthly,
+    return { headline, lead, intro, statements, forecastSummary, st, monthly,
              currentYear: new Date(d.generated_at).getFullYear(),
              probs: d.enso_probabilities, generatedAt: d.generated_at };
   }, [d]);
@@ -240,10 +221,9 @@ export default function App() {
           {/* 1 — how bad is it */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How bad is it?</h2>
-            <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.cmpText}</p>
-            <AnomalyChart monthly={monthly} currentYear={currentYear} referenceYear={derived.refYear} />
-            <p className="mt-3 max-w-3xl text-sm text-gray-500">
-              How many degrees the central Pacific was warmer than its long-term average, month by month (NOAA CPC data). The gray line shows 2015, the strongest previous event.
+            <AlignedComparison monthly={monthly} events={data.comparison.events} />
+            <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
+              The three strongest El Niños on record, aligned at the month each event became active. Values: NOAA CPC monthly Niño-3.4 anomaly (ERSST, 1991–2020 mean).
             </p>
           </section>
 
