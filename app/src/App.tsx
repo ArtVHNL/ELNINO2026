@@ -96,14 +96,31 @@ export default function App() {
       if (last && last[lonIdx] != null) thermoVal = `${Math.round(last[lonIdx] as number)} m`;
     }
 
-    const facts = [
-      { label: `Niño-3.4 anomaly · monthly · ${monthLab}`, value: monthlyVal !== null ? fmtSigned(monthlyVal) : "—", source: "CPC, official series" },
-      { label: "Niño-3.4 anomaly · weekly", value: weekly ? fmtSigned(weekly.value) : "—", source: `CPC weekly · ${weeklyDate}` },
-      { label: `ONI (3-month mean) · ${oni ? `${oni.season} ${oni.year}` : ""}`, value: oni ? fmtSigned(oni.value, 2) : "—", source: "CPC" },
-      { label: `MEI v2 · ${mei ? MONTH_FULL[new Date(mei.date + "T00:00:00Z").getUTCMonth()] : ""}`, value: mei ? (mei.value >= 0 ? "+" : "") + mei.value.toFixed(2) : "—", source: "NOAA PSL" },
-      { label: `Warm water volume · ${wwv ? MONTH_FULL[new Date(wwv.date + "T00:00:00Z").getUTCMonth()] : ""}`, value: wwv ? fmtSigned(wwv.value, 2) : "—", source: "GODAS ocean model" },
-      { label: "Thermocline depth · 100°W", value: thermoVal ?? "—", source: "GODAS ocean model" },
+    // -- plain-language statements for a general audience;
+    //    technical names stay, small, underneath.
+    const statements = [
+      {
+        head: "Warmer than normal",
+        value: monthlyVal !== null ? fmtSigned(monthlyVal) : "—",
+        sub: `Sea temperature in the eastern Pacific, ${monthLab} 2026 (Niño-3.4 region)`,
+      },
+      {
+        head: "Officially: El Niño - moderate and building",
+        value: oni ? fmtSigned(oni.value, 2) : "—",
+        sub: `3-month index, ${oni ? `${oni.season} ${oni.year}` : ""} (ONI)`,
+      },
+      {
+        head: "Extra heat stored under the surface",
+        value: wwv ? fmtSigned(wwv.value, 2) : "—",
+        sub: `Upper 300 m of the eastern Pacific, ${wwv ? MONTH_FULL[new Date(wwv.date + "T00:00:00Z").getUTCMonth()] : ""} 2026 (warm water volume)`,
+      },
     ];
+
+    const techLine = [
+      weekly ? `weekly index +${weekly.value.toFixed(1)}°C (${weeklyDate})` : null,
+      mei ? `ocean heat index (MEI) ${mei.value >= 0 ? "+" : ""}${mei.value.toFixed(2)}` : null,
+      thermoVal ? `warm-water ceiling ${thermoVal} at 100°W` : null,
+    ].filter(Boolean).join(" · ");
 
     // --- chart 1 conclusion (same official series on both sides)
     const refSeries = new Map<number, number>();
@@ -129,7 +146,7 @@ export default function App() {
     const sents = synopsis.split(/(?<=[.!?])\s+/).filter(Boolean);
     const quote = sents.slice(0, 2).join(" ") + (sents.length > 2 ? " …" : "");
 
-    return { headline, lead, facts, refYear, cmpText, quote, st, monthly, currentYear: new Date(d.generated_at).getFullYear(),
+    return { headline, lead, statements, techLine, refYear, cmpText, quote, st, monthly, currentYear: new Date(d.generated_at).getFullYear(),
              probs: d.enso_probabilities, generatedAt: d.generated_at };
   }, [d]);
 
@@ -168,23 +185,26 @@ export default function App() {
             {derived.lead}
           </p>
 
-          {/* key figures */}
+          {/* where things stand — plain language, technical names underneath */}
           <section className="mt-12 border-t border-gray-200 pt-8">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">Key figures</h2>
-            <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-8 md:grid-cols-3">
-              {derived.facts.map(f => (
-                <div key={f.label}>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">Where things stand</h2>
+            <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-3">
+              {derived.statements.map(st_ => (
+                <div key={st_.head}>
                   <div className="h-[3px] w-6 bg-[#DC2626]" />
-                  <div className="mt-3 text-xs text-gray-500">{f.label}</div>
-                  <div className="mt-1 text-3xl font-bold tracking-tight">{f.value}</div>
-                  <div className="mt-1 text-xs text-gray-400">{f.source}</div>
+                  <div className="mt-3 text-xs text-gray-500">{st_.head}</div>
+                  <div className="mt-1 text-3xl font-bold tracking-tight">{st_.value}</div>
+                  <div className="mt-1 text-xs text-gray-400">{st_.sub}</div>
                 </div>
               ))}
             </div>
+            {derived.techLine && (
+              <p className="mt-8 max-w-3xl text-xs text-gray-400">{derived.techLine}</p>
+            )}
           </section>
 
           {/* 1 — how bad is it */}
-          <section className="mt-14 border-t border-gray-200 pt-8">
+          <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How bad is it?</h2>
             <p className="mt-1 text-base text-gray-600">{derived.cmpText}</p>
             <AnomalyChart monthly={monthly} currentYear={currentYear} referenceYear={derived.refYear} />
@@ -194,19 +214,20 @@ export default function App() {
           </section>
 
           {/* 2 — what are the consequences */}
-          <section className="mt-14 border-t border-gray-200 pt-8">
+          <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">What are the consequences?</h2>
             <p className="mt-1 max-w-3xl text-base text-gray-600">
-              Drought in Australia and Indonesia; flooding in Peru and Ecuador; above-normal rainfall in East Africa. Typical September–February during El Niño.
+              Drought in Australia, Southeast Asia, India and southern Africa; heavy rain and flooding on the Pacific coast of South America; more rain in East Africa and southern South America.
+              El Niño’s effect on Europe is weak and indirect, with no consistent seasonal signal.
             </p>
             <ImpactMap />
             <p className="mt-3 max-w-3xl text-sm text-gray-500">
-              NOAA/IRI consensus pattern. The precipitation model forecast is currently unavailable, so zone extent is schematic.
+              Well-documented El Niño effects (NOAA/IRI consensus). The precipitation model forecast is currently unavailable, so the zones are drawn schematically.
             </p>
           </section>
 
           {/* 3 — how long does this last */}
-          <section className="mt-14 border-t border-gray-200 pt-8">
+          <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How long does this last?</h2>
             <p className="mt-1 text-base text-gray-600">
               100% probability of El Niño through January–March, easing to 97% in February–April.
@@ -218,7 +239,7 @@ export default function App() {
           </section>
 
           {/* official statement */}
-          <section className="mt-14 border-t border-gray-200 pt-8">
+          <section className="mt-16">
             <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">Official statement</h2>
             <blockquote className="mt-6 max-w-3xl border-l-2 border-gray-900 pl-4 text-lg leading-relaxed text-gray-800">
               “{derived.quote}”
@@ -233,18 +254,14 @@ export default function App() {
         </article>
 
         {/* footer */}
-        <footer className="border-t border-gray-200 py-8 text-sm text-gray-600">
-          <p>Data: NOAA CPC · NOAA PSL · GODAS. Updated automatically twice daily.</p>
-          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
-            <a className="underline underline-offset-2" href="data.json">data.json</a>
-            <a className="underline underline-offset-2" href="meta.json">data health</a>
-            <a className="underline underline-offset-2" target="_blank" rel="noopener noreferrer" href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml">official discussion</a>
-            <a className="underline underline-offset-2" target="_blank" rel="noopener noreferrer" href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/">IRI forecast</a>
-          </div>
-          <p className="mt-4 text-xs text-gray-400">
-            Monthly values use the official CPC ERSST series; the weekly value uses the weekly OI-SST product and can differ.
-            Independent monitoring project, not affiliated with NOAA.
+        <footer className="mt-16 border-t border-gray-200 py-8 text-sm text-gray-500">
+          <p>
+            Data: NOAA CPC · NOAA PSL · GODAS — updated twice a day.{" "}
+            <a className="underline underline-offset-2" href="data.json">raw data</a> ·{" "}
+            <a className="underline underline-offset-2" target="_blank" rel="noopener noreferrer" href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml">official discussion</a> ·{" "}
+            <a className="underline underline-offset-2" target="_blank" rel="noopener noreferrer" href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/">model forecast</a>
           </p>
+          <p className="mt-2 text-xs text-gray-400">Independent monitoring project, not affiliated with NOAA.</p>
         </footer>
       </div>
     </main>

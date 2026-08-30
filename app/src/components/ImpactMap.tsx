@@ -22,9 +22,29 @@ interface Zone {
 }
 
 const ZONES: Zone[] = [
-  { label: "drought risk", fill: "#DC2626", opacity: 0.26, ids: ["036", "360", "598"] },       // Australia, Indonesia, PNG
-  { label: "flooding risk", fill: "#1D4ED8", opacity: 0.40, ids: ["604", "218"] },            // Peru, Ecuador
-  { label: "above-normal rain", fill: "#60A5FA", opacity: 0.32, ids: ["404", "706", "231"] }, // Kenya, Somalia, Ethiopia
+  {
+    label: "drier than normal",
+    fill: "#DC2626",
+    opacity: 0.26,
+    // Australia, Indonesia, Papua New Guinea, India, southern Africa,
+    // Colombia and Venezuela
+    ids: ["036", "360", "598", "356", "710", "716", "508", "894", "072", "516", "170", "862"],
+  },
+  {
+    label: "heavy rain, flooding",
+    fill: "#1D4ED8",
+    opacity: 0.40,
+    // Peru, Ecuador (Pacific coast of South America)
+    ids: ["604", "218"],
+  },
+  {
+    label: "wetter than normal",
+    fill: "#60A5FA",
+    opacity: 0.32,
+    // Kenya, Somalia, Ethiopia (East Africa); Uruguay, Paraguay, Argentina
+    // (southern South America)
+    ids: ["404", "706", "231", "858", "600", "032"],
+  },
 ];
 
 const W = 880;

@@ -1,6 +1,6 @@
 // ============================================================================
-// "How long does this last?" — official CPC El Niño probability by 3-month
-// season (SON 2026 … FMA 2027). Flat horizontal bars, no decoration.
+// "How long does this last?" — official CPC El Niño probability for the next
+// six 3-month windows. Plain month labels, no season codes. Flat bars.
 // ============================================================================
 import { useMemo } from "react";
 import type { SeasonProbability } from "../data";
@@ -10,26 +10,44 @@ interface Props {
   generatedAt: string;
 }
 
-const SEASON_LABEL: Record<string, string> = {
-  JAS: "Jul–Sep", ASO: "Aug–Oct", SON: "Sep–Nov", OND: "Oct–Dec",
-  NDJ: "Nov–Jan", DJF: "Dec–Feb", JFM: "Jan–Mar", FMA: "Feb–Apr", MAM: "Mar–May",
+// month offsets (0 = Jan) per CPC season code
+// first calendar month (Jan = 0) and last month offset of each CPC season code
+const SEASON_MONTHS: Record<string, number> = {
+  JAS: 6, ASO: 7, SON: 8, OND: 9, NDJ: 10, DJF: 11, JFM: 0, FMA: 1, MAM: 2,
 };
 
 export function OutlookChart({ probabilities, generatedAt }: Props) {
   const rows = useMemo(() => {
-    // order seasons as the CPC table does and keep the next six from the current month
-    const ordered = ["ASO", "SON", "OND", "NDJ", "DJF", "JFM", "FMA", "MAM"];
+    // pipeline order: JAS, ASO, SON, OND, NDJ, DJF, JFM, FMA, MAM
+    const ordered = ["JAS", "ASO", "SON", "OND", "NDJ", "DJF", "JFM", "FMA", "MAM"];
+    const cm = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const bySeason = new Map(probabilities.map(p => [p.season, p]));
     const now = new Date(generatedAt);
-    const curMonth = now.getMonth(); // 0-based, e.g. 7 = August
-    const startIdx = ordered.findIndex(s => SEASON_LABEL[s].startsWith(
-      MONTH_ABBR[(curMonth + 1) % 12]
-    ));
+    const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    // first season window starting in the next calendar month
+    const startIdx = ordered.findIndex(s => {
+      const s0 = SEASON_MONTHS[s];
+      return s0 === nextMonth.getUTCMonth();
+    });
     const idx = startIdx >= 0 ? startIdx : 0;
-    return ordered.slice(idx, idx + 6).map(s => bySeason.get(s)).filter(Boolean) as SeasonProbability[];
+
+    const yy = (d: Date) => String(d.getUTCFullYear() % 100).padStart(2, "0");
+
+    return ordered.slice(idx, idx + 6).map(season => {
+      const prob = bySeason.get(season);
+      if (!prob) return null;
+      const k = ordered.indexOf(season) - idx;
+      const start = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + k, 1));
+      const end = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + k + 2, 1));
+      const label =
+        start.getUTCFullYear() === end.getUTCFullYear()
+          ? `${cm[start.getUTCMonth()]}–${cm[end.getUTCMonth()]} ${yy(start)}`
+          : `${cm[start.getUTCMonth()]} ${yy(start)}–${cm[end.getUTCMonth()]} ${yy(end)}`;
+      return { season, label, el_nino: prob.el_nino };
+    }).filter(Boolean) as { season: string; label: string; el_nino: number }[];
   }, [probabilities, generatedAt]);
 
-  if (rows.length === 0) {
+if (rows.length === 0) {
     return <p className="text-sm text-gray-600">No official probability forecast published.</p>;
   }
 
@@ -40,9 +58,8 @@ export function OutlookChart({ probabilities, generatedAt }: Props) {
       <div className="space-y-3">
         {rows.map(r => (
           <div key={r.season} className="flex items-center gap-4">
-            <div className="w-28 shrink-0 text-right">
-              <span className="text-sm font-semibold text-gray-900">{r.season}</span>
-              <span className="block text-xs text-gray-500">{SEASON_LABEL[r.season]}</span>
+            <div className="w-32 shrink-0 text-right text-sm font-semibold text-gray-900">
+              {r.label}
             </div>
             <div className="relative h-5 flex-1 border border-gray-200">
               <div
@@ -56,9 +73,6 @@ export function OutlookChart({ probabilities, generatedAt }: Props) {
           </div>
         ))}
       </div>
-
     </div>
   );
 }
-
-const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
