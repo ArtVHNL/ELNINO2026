@@ -28,3 +28,4 @@ __pycache__/
 .pytest_cache/
 *.pyc
 site_local.png
+site_check.png
