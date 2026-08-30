@@ -29,22 +29,19 @@ export function buildOutlookRows(probabilities: SeasonProbability[], generatedAt
     const cm = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const bySeason = new Map(probabilities.map(p => [p.season, p]));
     const now = new Date(generatedAt);
-    const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-    // first season window starting in the next calendar month
-    const startIdx = ordered.findIndex(s => {
-      const s0 = SEASON_MONTHS[s];
-      return s0 === nextMonth.getUTCMonth();
-    });
+    const curMonth = now.getUTCMonth();
+    // start at the season in progress; show the whole official table (through May 2027)
+    const startIdx = ordered.findIndex(s => SEASON_MONTHS[s] === curMonth);
     const idx = startIdx >= 0 ? startIdx : 0;
 
     const yy = (d: Date) => String(d.getUTCFullYear() % 100).padStart(2, "0");
 
-    return ordered.slice(idx, idx + 7).map(season => {
+    return ordered.slice(idx, idx + 9).map(season => {
       const prob = bySeason.get(season);
       if (!prob) return null;
       const k = ordered.indexOf(season) - idx;
-      const start = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + k, 1));
-      const end = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + k + 2, 1));
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + k, 1));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + k + 2, 1));
       const label =
         start.getUTCFullYear() === end.getUTCFullYear()
           ? `${cm[start.getUTCMonth()]}–${cm[end.getUTCMonth()]} ${yy(start)}`

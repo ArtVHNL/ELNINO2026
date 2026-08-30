@@ -6,24 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnsoDashboardData, fetchLiveEnsoData, ComparisonEvent } from "./data";
 import { AnomalyChart } from "./components/AnomalyChart";
 import { ImpactMap } from "./components/ImpactMap";
-import { OutlookChart, buildOutlookRows, OutlookRow } from "./components/OutlookChart";
+import { OutlookChart } from "./components/OutlookChart";
 import { PredictedChart } from "./components/PredictedChart";
 
 const MONTH_FULL = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-
-function outlookSummary(rows: OutlookRow[]): string {
-  if (rows.length === 0) return "No official probability forecast published.";
-  const full = rows.filter(r => r.el_nino === 100);
-  const easing = rows.find(r => r.el_nino < 100);
-  if (full.length === rows.length) return `100% probability of El Niño through ${full[full.length - 1].label}.`;
-  if (easing && full.length > 0) {
-    return `100% probability of El Niño through ${full[full.length - 1].label}, easing to ${easing.el_nino}% in ${easing.label}.`;
-  }
-  return `Probability peaks at ${rows[0].el_nino}% (${rows[0].label}).`;
-}
 
 function chancePhrase(st: { probabilities?: Record<string, string> }): string {
   const raw = st.probabilities?.very_strong_chance || "greater than 90%";
@@ -129,22 +118,16 @@ export default function App() {
         sub: `Eastern Pacific now ${sstNowLab} · ${monthLab} 2026 (Niño-3.4 region)`,
       },
       {
-        head: "Officially: a moderate El Niño",
+        head: "At the moment: a moderate El Niño",
         value: oni ? fmtSigned(oni.value, 2) : "—",
         sub: `3-month index, May–July 2026 (ONI)`,
       },
       {
-        head: "Extra heat stored below the surface",
+        head: "Warm water below the surface is building",
         value: wwv ? fmtSigned(wwv.value, 2) : "—",
-        sub: `Warm water volume, July 2026 (upper 300 m)`,
+        sub: `2.2°C warmer than normal in the upper 300 m — an anomaly, not the water temperature itself (July 2026)`,
       },
     ];
-
-    const techLine = [
-      weekly ? `Weekly index +${weekly.value.toFixed(1)}°C (${weeklyDate})` : null,
-      mei ? `MEI +${mei.value >= 0 ? "" : "−"}${Math.abs(mei.value).toFixed(2)}` : null,
-      thermoVal ? `Thermocline ${thermoVal} (100°W)` : null,
-    ].filter(Boolean).join(" · ");
 
     // --- chart 1 conclusion (same official series on both sides)
     const refSeries = new Map<number, number>();
@@ -174,16 +157,24 @@ export default function App() {
       const MONTHS_SHORT_FC = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const peakLabel = `${MONTHS_SHORT_FC[parseInt(mm[1], 10) - 1]} ${mm[0]}`;
       forecastSummary =
-        `Forecast: +${fc.mean[peak].toFixed(1)}°C peak in ${peakLabel} (${fc.model_count}-model mean, range +${fc.min[peak].toFixed(1)}–+${fc.max[peak].toFixed(1)}°C).`;
+        `Forecast: +${fc.mean[peak].toFixed(1)}°C peak in ${peakLabel} (range +${fc.min[peak].toFixed(1)}–+${fc.max[peak].toFixed(1)}°C).`;
     }
 
-    // --- statement: first two sentences only
-    const synopsis = (st.synopsis || "").replace(/\s+/g, " ").trim();
-    const sents = synopsis.split(/(?<=[.!?])\s+/).filter(Boolean);
-    const quote = sents.slice(0, 4).join(" ") + (sents.length > 4 ? " …" : "");
+    // --- informative intro (our words, based on the official statement)
+    const fcPeak = (() => {
+      const m = d.nino34_forecast?.mean?.length ? d.nino34_forecast : null;
+      if (!m) return null;
+      const peak = m.mean.reduce((best, v, i) => (v > m.mean[best] ? i : best), 0);
+      const [yy, mm] = m.months[peak].split("-");
+      const peakLabel = `${MONTH_FULL[parseInt(mm, 10) - 1].slice(0, 3)} ${yy}`;
+      return { v: m.mean[peak], label: peakLabel };
+    })();
+    const intro =
+      `The equatorial Pacific is warming steadily: the ${monthLab} index stands at ${monthlyVal !== null ? fmtSigned(monthlyVal) : "—"}.` +
+      ` The U.S. Climate Prediction Center keeps an El Niño Advisory and puts the chance of a very strong event this fall and winter ${chance || "high"}.` +
+      (fcPeak ? ` Six international climate models expect the water temperature to peak at +${fcPeak.v.toFixed(1)}°C around ${fcPeak.label}.` : "");
 
-    return { headline, lead, statements, techLine, refYear, cmpText, forecastSummary, quote, st, monthly,
-             outlookRows: buildOutlookRows(d.enso_probabilities, d.generated_at),
+    return { headline, lead, intro, statements, refYear, cmpText, forecastSummary, st, monthly,
              currentYear: new Date(d.generated_at).getFullYear(),
              probs: d.enso_probabilities, generatedAt: d.generated_at };
   }, [d]);
@@ -219,12 +210,12 @@ export default function App() {
             {derived.headline}
           </h1>
 
-          <section className="mt-8 max-w-3xl">
-            <blockquote className="border-l-2 border-gray-900 pl-4 text-justify text-lg leading-relaxed text-gray-800">
-              “{derived.quote}”
-            </blockquote>
+          <section className="mt-6 max-w-4xl">
+            <p className="text-justify text-lg leading-relaxed text-gray-800">
+              {derived.intro}
+            </p>
             <p className="mt-3 text-sm text-gray-500">
-              NOAA Climate Prediction Center, {st.issued}.{" "}
+              Based on the official ENSO Diagnostic Discussion (NOAA Climate Prediction Center, {st.issued}).{" "}
               <a href={st.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-gray-900">
                 Full statement
               </a>
@@ -233,7 +224,7 @@ export default function App() {
 
           {/* where things stand — plain language, technical names underneath */}
           <section className="mt-12 border-t border-gray-200 pt-8">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">Where things stand</h2>
+            <h2 className="text-2xl font-bold tracking-tight">Where things stand</h2>
             <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-10 md:grid-cols-3">
               {derived.statements.map(st_ => (
                 <div key={st_.head} className="flex flex-col">
@@ -244,9 +235,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-            {derived.techLine && (
-              <p className="mt-8 max-w-3xl text-xs text-gray-400">{derived.techLine}</p>
-            )}
           </section>
 
           {/* 1 — how bad is it */}
@@ -255,7 +243,7 @@ export default function App() {
             <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.cmpText}</p>
             <AnomalyChart monthly={monthly} currentYear={currentYear} referenceYear={derived.refYear} />
             <p className="mt-3 max-w-3xl text-sm text-gray-500">
-              Monthly Niño-3.4 anomaly, °C vs 1991–2020 (official CPC ERSST series).
+              How many degrees the central Pacific was warmer than its long-term average, month by month (NOAA CPC data). The gray line shows 2015, the strongest previous event.
             </p>
           </section>
 
@@ -265,7 +253,7 @@ export default function App() {
             <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.forecastSummary}</p>
             <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
-              NOAA CPC NMME model ensemble, issued {data.nino34_forecast?.init || "—"} ({data.nino34_forecast?.model_count ?? 0} models); raw values, see the statement above.
+              Six international climate models (NOAA NMME project), issued {data.nino34_forecast?.init || "—"}. Model forecasts can run higher than reality in strong events — the official view is at the top of this page.
             </p>
           </section>
 
@@ -275,7 +263,7 @@ export default function App() {
             <ul className="mt-1 max-w-3xl space-y-1 text-justify text-base text-gray-700">
               <li><strong className="text-gray-900">Drier:</strong> Australia, Southeast Asia, India, southern Africa, northern South America.</li>
               <li><strong className="text-gray-900">Wetter:</strong> Peru and Ecuador (flooding), East Africa, southern South America.</li>
-              <li><strong className="text-gray-900">Europe:</strong> no consistent seasonal effect.</li>
+              <li><strong className="text-gray-900">Europe:</strong> barely affected — winters are occasionally milder, but there is no reliable pattern.</li>
             </ul>
             <ImpactMap />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
@@ -286,7 +274,6 @@ export default function App() {
           {/* 4 — how long does this last */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How long does this last?</h2>
-            <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{outlookSummary(derived.outlookRows)}</p>
             <OutlookChart probabilities={derived.probs} generatedAt={generatedAt} />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
               Official NOAA CPC probability of El Niño per three-month season, {derived.st.issued}.
