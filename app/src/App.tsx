@@ -305,7 +305,7 @@ export default function App() {
         </article>
 
         {/* footer */}
-        <footer className="mt-16 border-t border-gray-200 py-8 text-sm text-gray-500">
+        <footer className="mt-9 border-t border-gray-200 pt-5 pb-6 text-sm text-gray-500">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span>{T("footer1")}</span>
             <a className="underline underline-offset-2 hover:text-gray-900" href="data.json">{T("footerRaw")}</a>
