@@ -425,6 +425,118 @@ def fetch_cpc_probabilities() -> tuple[list[dict], dict]:
 
 
 # --------------------------------------------------------------------------
+# 6c. NMME Niño-3.4 forecast — CPC real-time ensemble (real model data)
+# --------------------------------------------------------------------------
+NMME_BASE = "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom"
+NMME_MODELS = ["CFSv2", "CanESM5", "GEM5.2_NEMO", "GFDL_FLOR", "GFDL_SPEAR",
+               "NCAR_CESM1", "NCAR_CCSM4", "NASA_GEOS5v2"]
+
+
+def _nmme_latest_init(html: str | None) -> tuple[str, str] | None:
+    """Return (init_dir, init_label) for the most recent NMME forecast."""
+    if not html:
+        return None
+    dirs = sorted(set(re.findall(r'href="([0-9]{10})/"', html)))
+    if not dirs:
+        return None
+    latest = dirs[-1]
+    return latest, f"{latest[:4]}-{latest[4:6]}-{latest[6:8]}"
+
+
+def _nmme_nino34(binary: bytes) -> tuple[np.ndarray, list[str]] | None:
+    """Compute the Niño-3.4 box mean per target month from a downloaded NMME file."""
+    import tempfile
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as f:
+            f.write(binary)
+            tmp = f.name
+        ds = netCDF4.Dataset(tmp)
+        lat = np.asarray(ds.variables["lat"][:], dtype=float)
+        lon = np.asarray(ds.variables["lon"][:], dtype=float)
+        target = np.asarray(ds.variables["target"][:], dtype=float)
+        fcst = ds.variables["fcst"][:]
+        ds.close()
+        la = np.where(np.abs(lat) <= 5.0)[0]
+        lo = np.where((lon >= 190.0) & (lon <= 240.0))[0]
+        if len(la) == 0 or len(lo) == 0:
+            return None
+        data = np.ma.filled(np.asarray(fcst, dtype=np.float64), np.nan)
+        box = np.nanmean(np.nanmean(data[:, la[0]:la[-1] + 1, lo[0]:lo[-1] + 1], axis=1), axis=1)
+        months = []
+        for t in target.astype(int):
+            y, m = 1960 + (t - 1) // 12, (t - 1) % 12 + 1
+            months.append(f"{y}-{m:02d}")
+        return box, months
+    except Exception as e:  # noqa: BLE001
+        log.warning("  NMME parse failed: %s", e)
+        return None
+
+
+def fetch_nmme_nino34() -> tuple[dict, dict]:
+    if not HAS_NETCDF4:
+        return {}, {"source": "synthetic", "error": "netCDF4 not installed"}
+    listing = fetch_text(f"{NMME_BASE}/ENSMEAN/", timeout=45)
+    step = _nmme_latest_init(listing)
+    if not step:
+        return {}, {"source": "synthetic", "error": "no NMME init directory found"}
+    init_dir, init_label = step
+    file_listing = fetch_text(f"{NMME_BASE}/ENSMEAN/{init_dir}/", timeout=60)
+    files = sorted(set(re.findall(
+        r'href="([A-Za-z0-9_.]+\.tmpsfc\.' + init_dir[:6] + r'\.ENSMEAN\.anom\.nc)"', file_listing or "")))
+
+
+    months: list[str] | None = None
+    per_model: dict[str, np.ndarray] = {}
+    for fname in files:
+        model = fname.split(".")[0]
+        if model == "NMME":
+            continue
+        url = f"{NMME_BASE}/ENSMEAN/{init_dir}/{fname}"
+        raw = fetch_binary(url, timeout=120)
+        if raw is None:
+            continue
+        res = _nmme_nino34(raw)
+        if res is None:
+            continue
+        box, months_t = res
+        if months is None:
+            months = months_t
+        per_model[model] = box
+
+    if not per_model:
+        return {}, {"source": "synthetic", "error": "all NMME model reads failed"}
+
+    stacked = np.vstack(list(per_model.values()))
+    mean = np.nanmean(stacked, axis=0)
+    mn = np.nanmin(stacked, axis=0)
+    mx = np.nanmax(stacked, axis=0)
+
+    ens_mean = None
+    for fname in files:
+        if fname.startswith("NMME."):
+            raw = fetch_binary(f"{NMME_BASE}/ENSMEAN/{init_dir}/{fname}", timeout=120)
+            if raw:
+                res = _nmme_nino34(raw)
+                if res:
+                    ens_mean = res[0]
+
+    if ens_mean is not None and months:
+        ens_mean = ens_mean[:len(months)]
+    log.info("  OK: %d models, %d months, mean peak %.2f°C",
+             len(per_model), len(months or []), float(np.nanmax(mean)))
+    return {
+        "init": init_label,
+        "months": months or [],
+        "ensemble_mean": [round(float(v), 2) for v in (ens_mean if ens_mean is not None else mean)],
+        "mean": [round(float(v), 2) for v in mean],
+        "min": [round(float(v), 2) for v in mn],
+        "max": [round(float(v), 2) for v in mx],
+        "model_count": len(per_model),
+        "source": "NOAA CPC NMME real-time",
+    }, {"source": "live", "url": f"{NMME_BASE}/ENSMEAN/{init_dir}/"}
+
+
+# --------------------------------------------------------------------------
 # 7. GODAS subsurface temperature via PSL THREDDS OPeNDAP
 #    -> Hovmöller anomaly grid, 20°C isotherm depth, Warm Water Volume
 # --------------------------------------------------------------------------
@@ -986,6 +1098,8 @@ def main() -> int:
     run("cpc_ensodisc", fetch_cpc_ensodisc)
     log.info("[6b/12] CPC official ENSO probabilities...")
     run("cpc_probabilities", fetch_cpc_probabilities)
+    log.info("[6c/14] NMME Niño-3.4 forecast (real-time ensemble)...")
+    run("nmme_nino34", fetch_nmme_nino34)
     log.info("[7/12] GODAS subsurface (Hovmöller/WWV/thermocline)...")
     run("godas", lambda: fetch_godas(now, out_dir))
     log.info("[8/11] OLR anomaly (CPC blended, 1°)...")
@@ -1063,6 +1177,7 @@ def main() -> int:
         "ensemble_plume": plume,
         "precip_forecast": precip,
         "enso_probabilities": endpoints.get("cpc_probabilities", []),
+        "nino34_forecast": endpoints.get("nmme_nino34", {}),
         "enso_status": {
             "advisory": status_block.get("advisory", "Unknown"),
             "strength": status_block.get("strength") or category or "Unknown",
@@ -1090,6 +1205,7 @@ def main() -> int:
             "precip": status.get("precip", {}).get("source"),
             "enso_status": status.get("cpc_ensodisc", {}).get("source"),
             "enso_probabilities": status.get("cpc_probabilities", {}).get("source"),
+            "nino34_forecast": status.get("nmme_nino34", {}).get("source"),
         },
         "_pipeline": {
             "version": VERSION,

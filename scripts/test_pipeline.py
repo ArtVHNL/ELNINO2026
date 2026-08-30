@@ -285,7 +285,7 @@ def test_compute_changes():
 # --------------------------------------------------------------------------
 def test_schema_keys_present():
     required = [
-        "schema_version", "generated_at", "nino34_monthly", "nino34_weekly",
+        "schema_version", "generated_at", "nino34_monthly", "nino34_forecast", "nino34_weekly",
         "oni_monthly", "soi_monthly", "mei_monthly", "wwv_monthly",
         "olr_anomaly", "subsurface_temp", "wind850_anomaly", "ensemble_plume",
         "precip_forecast", "enso_status", "current", "comparison",

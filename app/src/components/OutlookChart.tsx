@@ -16,8 +16,14 @@ const SEASON_MONTHS: Record<string, number> = {
   JAS: 6, ASO: 7, SON: 8, OND: 9, NDJ: 10, DJF: 11, JFM: 0, FMA: 1, MAM: 2,
 };
 
-export function OutlookChart({ probabilities, generatedAt }: Props) {
-  const rows = useMemo(() => {
+export interface OutlookRow {
+  season: string;
+  label: string;
+  el_nino: number;
+}
+
+export function buildOutlookRows(probabilities: SeasonProbability[], generatedAt: string): OutlookRow[] {
+  {
     // pipeline order: JAS, ASO, SON, OND, NDJ, DJF, JFM, FMA, MAM
     const ordered = ["JAS", "ASO", "SON", "OND", "NDJ", "DJF", "JFM", "FMA", "MAM"];
     const cm = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -44,10 +50,14 @@ export function OutlookChart({ probabilities, generatedAt }: Props) {
           ? `${cm[start.getUTCMonth()]}–${cm[end.getUTCMonth()]} ${yy(start)}`
           : `${cm[start.getUTCMonth()]} ${yy(start)}–${cm[end.getUTCMonth()]} ${yy(end)}`;
       return { season, label, el_nino: prob.el_nino };
-    }).filter(Boolean) as { season: string; label: string; el_nino: number }[];
-  }, [probabilities, generatedAt]);
+    }).filter(Boolean) as OutlookRow[];
+  }
+}
 
-if (rows.length === 0) {
+export function OutlookChart({ probabilities, generatedAt }: Props) {
+  const rows = useMemo(() => buildOutlookRows(probabilities, generatedAt), [probabilities, generatedAt]);
+
+  if (rows.length === 0) {
     return <p className="text-sm text-gray-600">No official probability forecast published.</p>;
   }
 

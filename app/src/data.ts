@@ -44,6 +44,17 @@ export interface EnsoStatus {
   url?: string;
 }
 
+export interface Nino34Forecast {
+  init: string;
+  months: string[];
+  ensemble_mean: number[];
+  mean: number[];
+  min: number[];
+  max: number[];
+  model_count: number;
+  source: string;
+}
+
 export interface SeasonProbability {
   season: string;
   la_nina: number;
@@ -102,6 +113,7 @@ export interface EnsoDashboardData {
   precip_forecast: unknown;
   enso_status: EnsoStatus;
   enso_probabilities: SeasonProbability[];
+  nino34_forecast: Nino34Forecast;
   current: CurrentValues;
   comparison: { events: ComparisonEvent[] };
   sources: SourceMap;

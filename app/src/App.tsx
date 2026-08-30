@@ -6,12 +6,34 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnsoDashboardData, fetchLiveEnsoData, ComparisonEvent } from "./data";
 import { AnomalyChart } from "./components/AnomalyChart";
 import { ImpactMap } from "./components/ImpactMap";
-import { OutlookChart } from "./components/OutlookChart";
+import { OutlookChart, buildOutlookRows, OutlookRow } from "./components/OutlookChart";
+import { PredictedChart } from "./components/PredictedChart";
 
 const MONTH_FULL = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+function outlookSummary(rows: OutlookRow[]): string {
+  if (rows.length === 0) return "No official probability forecast published.";
+  const full = rows.filter(r => r.el_nino === 100);
+  const easing = rows.find(r => r.el_nino < 100);
+  if (full.length === rows.length) return `100% probability of El Niño through ${full[full.length - 1].label}.`;
+  if (easing && full.length > 0) {
+    return `100% probability of El Niño through ${full[full.length - 1].label}, easing to ${easing.el_nino}% in ${easing.label}.`;
+  }
+  return `Probability peaks at ${rows[0].el_nino}% (${rows[0].label}).`;
+}
+
+function chancePhrase(st: { probabilities?: Record<string, string> }): string {
+  const raw = st.probabilities?.very_strong_chance || "greater than 90%";
+  const lower = raw[0].toLowerCase() + raw.slice(1);
+  return lower;
+}
+
+function derivedCurOni(d: EnsoDashboardData): number {
+  return d.current.oni?.value ?? 1.39;
+}
 
 function fmtSigned(v: number, digits = 1): string {
   return `${v >= 0 ? "+" : ""}${v.toFixed(digits)}°C`;
@@ -141,12 +163,26 @@ export default function App() {
       }
     }
 
+    // --- forecast summary (what the models predict)
+    const fc = d.nino34_forecast;
+    let forecastSummary = "The water temperature forecast is not available right now.";
+    if (fc?.mean?.length && fc.months?.length) {
+      const peak = fc.mean.reduce((best, v, i) => (v > fc.mean[best] ? i : best), 0);
+      const mm = fc.months[peak].split("-");
+      const MONTHS_SHORT_FC = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const peakLabel = `${MONTHS_SHORT_FC[parseInt(mm[1], 10) - 1]} ${mm[0]}`;
+      forecastSummary =
+        `Models forecast the Pacific to peak at +${fc.mean[peak].toFixed(1)}°C around ${peakLabel} — a very strong event (models: ${fc.model_count}, range +${fc.min[peak].toFixed(1)} to +${fc.max[peak].toFixed(1)}°C).`;
+    }
+
     // --- statement: first two sentences only
     const synopsis = (st.synopsis || "").replace(/\s+/g, " ").trim();
     const sents = synopsis.split(/(?<=[.!?])\s+/).filter(Boolean);
     const quote = sents.slice(0, 2).join(" ") + (sents.length > 2 ? " …" : "");
 
-    return { headline, lead, statements, techLine, refYear, cmpText, quote, st, monthly, currentYear: new Date(d.generated_at).getFullYear(),
+    return { headline, lead, statements, techLine, refYear, cmpText, forecastSummary, quote, st, monthly,
+             outlookRows: buildOutlookRows(d.enso_probabilities, d.generated_at),
+             currentYear: new Date(d.generated_at).getFullYear(),
              probs: d.enso_probabilities, generatedAt: d.generated_at };
   }, [d]);
 
@@ -181,7 +217,7 @@ export default function App() {
           <h1 className="max-w-4xl text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
             {derived.headline}
           </h1>
-          <p className="mt-6 max-w-3xl text-lg font-semibold leading-snug text-gray-900">
+          <p className="mt-6 max-w-3xl text-lg font-semibold leading-snug text-gray-900 sm:text-xl">
             {derived.lead}
           </p>
 
@@ -192,9 +228,9 @@ export default function App() {
               {derived.statements.map(st_ => (
                 <div key={st_.head} className="flex flex-col">
                   <div className="h-[3px] w-6 bg-[#DC2626]" />
-                  <div className="mt-3 min-h-4 text-xs text-gray-500">{st_.head}</div>
-                  <div className="mt-2 text-3xl font-bold tracking-tight tabular-nums">{st_.value}</div>
-                  <div className="mt-2 min-h-8 text-xs leading-4 text-gray-400">{st_.sub}</div>
+                  <div className="mt-3 min-h-5 text-sm font-semibold text-gray-900">{st_.head}</div>
+                  <div className="mt-1 text-3xl font-bold tracking-tight tabular-nums">{st_.value}</div>
+                  <div className="mt-2 min-h-8 text-xs leading-4 text-gray-500">{st_.sub}</div>
                 </div>
               ))}
             </div>
@@ -213,7 +249,20 @@ export default function App() {
             </p>
           </section>
 
-          {/* 2 — what are the consequences */}
+          {/* 2 — what is predicted (observed vs forecast water temperature) */}
+          <section className="mt-16">
+            <h2 className="text-2xl font-bold tracking-tight">What is predicted?</h2>
+            <p className="mt-1 max-w-3xl text-base text-gray-600">{derived.forecastSummary}</p>
+            <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
+            <p className="mt-3 max-w-3xl text-sm text-gray-500">
+              NOAA CPC NMME real-time multi-model forecast, issued {data.nino34_forecast?.init || "—"};
+              {data.nino34_forecast?.model_count ? ` ${data.nino34_forecast.model_count} models,` : ""} range shown in light red.
+              Raw model values; models tend to run high during strong events. The official CPC statement
+              is the reference.
+            </p>
+          </section>
+
+          {/* 3 — what are the consequences */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">What are the consequences?</h2>
             <p className="mt-1 max-w-3xl text-base text-gray-600">
@@ -226,15 +275,13 @@ export default function App() {
             </p>
           </section>
 
-          {/* 3 — how long does this last */}
+          {/* 4 — how long does this last */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How long does this last?</h2>
-            <p className="mt-1 text-base text-gray-600">
-              100% probability of El Niño through January–March, easing to 97% in February–April.
-            </p>
+            <p className="mt-1 max-w-3xl text-base text-gray-600">{outlookSummary(derived.outlookRows)}</p>
             <OutlookChart probabilities={derived.probs} generatedAt={generatedAt} />
             <p className="mt-3 max-w-3xl text-sm text-gray-500">
-              Official NOAA CPC probability per three-month season, {st.issued}.
+              Official NOAA CPC probability of El Niño per three-month season, {derived.st.issued}.
             </p>
           </section>
 

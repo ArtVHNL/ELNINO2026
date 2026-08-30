@@ -1,6 +1,6 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-08-30T15:08:17Z",
+ "generated_at": "2026-08-30T15:53:27Z",
  "nino34_monthly": [
   {
    "date": "1950-01-01",
@@ -217626,6 +217626,66 @@
    "el_nino": 82.0
   }
  ],
+ "nino34_forecast": {
+  "init": "2026-08-08",
+  "months": [
+   "2026-07",
+   "2026-08",
+   "2026-09",
+   "2026-10",
+   "2026-11",
+   "2026-12",
+   "2027-01",
+   "2027-02",
+   "2027-03"
+  ],
+  "ensemble_mean": [
+   2.76,
+   3.33,
+   3.73,
+   3.94,
+   3.85,
+   3.63,
+   3.27,
+   2.77,
+   2.31
+  ],
+  "mean": [
+   2.76,
+   3.33,
+   3.73,
+   3.94,
+   3.85,
+   3.63,
+   3.27,
+   2.77,
+   2.31
+  ],
+  "min": [
+   2.35,
+   2.55,
+   2.79,
+   3.24,
+   2.96,
+   2.64,
+   2.26,
+   1.7,
+   1.06
+  ],
+  "max": [
+   3.19,
+   3.85,
+   4.48,
+   4.74,
+   4.59,
+   4.79,
+   5.1,
+   4.83,
+   4.52
+  ],
+  "model_count": 6,
+  "source": "NOAA CPC NMME real-time"
+ },
  "enso_status": {
   "advisory": "El Ni\u00f1o Advisory",
   "strength": "El Ni\u00f1o Advisory",
@@ -217934,16 +217994,17 @@
   "wind850": "synthetic",
   "precip": "synthetic",
   "enso_status": "live",
-  "enso_probabilities": "live"
+  "enso_probabilities": "live",
+  "nino34_forecast": "live"
  },
  "_pipeline": {
   "version": "3.0.0",
-  "timestamp": "2026-08-30T15:08:17.024392+00:00",
-  "duration_sec": 96.1,
+  "timestamp": "2026-08-30T15:53:27.609873+00:00",
+  "duration_sec": 81.1,
   "status": {
    "cpc_sstoi": {
     "source": "live",
-    "latency_ms": 619,
+    "latency_ms": 628,
     "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
    },
    "cpc_ersst5": {
@@ -217953,58 +218014,63 @@
    },
    "cpc_weekly": {
     "source": "live",
-    "latency_ms": 817,
+    "latency_ms": 993,
     "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
    },
    "cpc_oni": {
     "source": "live",
-    "latency_ms": 441,
+    "latency_ms": 420,
     "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
    },
    "cpc_soi": {
     "source": "live",
-    "latency_ms": 440,
+    "latency_ms": 421,
     "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
    },
    "psl_mei": {
     "source": "live",
-    "latency_ms": 457,
+    "latency_ms": 433,
     "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
    },
    "cpc_ensodisc": {
     "source": "live",
-    "latency_ms": 433,
+    "latency_ms": 437,
     "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
    },
    "cpc_probabilities": {
     "source": "live",
-    "latency_ms": 450,
+    "latency_ms": 434,
     "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/"
+   },
+   "nmme_nino34": {
+    "source": "live",
+    "latency_ms": 18269,
+    "url": "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom/ENSMEAN/2026080800/"
    },
    "godas": {
     "source": "live",
-    "latency_ms": 86352,
+    "latency_ms": 54067,
     "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
    },
    "olr": {
     "source": "live",
-    "latency_ms": 5564,
+    "latency_ms": 4387,
     "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
    },
    "plume": {
     "source": "synthetic",
-    "latency_ms": 11,
+    "latency_ms": 10,
     "url": "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/",
     "note": "IRI data library requires login; official plume figure linked instead"
    },
    "wind850": {
     "source": "synthetic",
-    "latency_ms": 6,
+    "latency_ms": 5,
     "note": "NCEP/NCAR reanalysis via IRI requires login; schematic field"
    },
    "precip": {
     "source": "synthetic",
-    "latency_ms": 4,
+    "latency_ms": 3,
     "note": "NMME via IRI requires login; climatological schematic"
    }
   },
