@@ -7,7 +7,7 @@
  GoogleNews ┤  ┌──────────────┐  │  │ React 19 dashboard (app/)             │  │
  RSS        ├─▶│ fetch_data.py│──┼─▶│  · data.json + news/ same-origin      │  │
              │  └──────────────┘  │  │  · provenance badges, freshness       │  │
-             │  ┌──────────────┐  │  │  · AI expert briefing panel           │  │
+             │  ┌──────────────┐  │  │  · newsroom-style flat white UI           │  │
              │  │ deepseek_    │  │  │  · deck.gl map lazy-loaded            │  │
              │  │ briefing.py  │  │  │  · SEO / Open Graph / JSON-LD         │  │
              │  └──────────────┘  │  └────────────────────────────────────────┘  │
