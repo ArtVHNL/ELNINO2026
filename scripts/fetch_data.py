@@ -148,27 +148,29 @@ def fetch_cpc_sstoi() -> tuple[dict, dict]:
 CPC_ERSST5_URL = "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
 
 
-def fetch_cpc_ersst5() -> tuple[list[dict], dict]:
-    """Monthly Niño-3.4 anomaly, ERSST v5, 1991–2020 base (1950–present)."""
+def fetch_cpc_ersst5() -> tuple[dict, dict]:
+    """Monthly Niño-3.4 anomaly + absolute SST, ERSST v5, 1991–2020 base."""
     text = fetch_text(CPC_ERSST5_URL)
     if not text:
-        return [], {"source": "synthetic", "error": "fetch failed"}
-    records = []
+        return {"anomaly": [], "sst": []}, {"source": "synthetic", "error": "fetch failed"}
+    anomaly, sst = [], []
     for line in text.strip().splitlines():
         parts = line.split()
         if len(parts) < 10 or not parts[0].isdigit():
             continue
         year, month = int(parts[0]), int(parts[1])
         try:
-            val = float(parts[9])  # NINO3.4 ANOM column
+            a = float(parts[9])  # NINO3.4 ANOM column
+            t = float(parts[8])  # NINO3.4 SST column (°C)
         except (ValueError, IndexError):
             continue
-        if -10 < val < 10:
-            records.append({"date": f"{year}-{month:02d}-01", "value": round(val, 2)})
-    if len(records) < 24:
-        return [], {"source": "synthetic", "error": f"only {len(records)} rows"}
-    log.info("  OK: %d rows (latest %s)", len(records), records[-1]["date"])
-    return records, {"source": "live", "url": CPC_ERSST5_URL}
+        if -10 < a < 10 and 0 < t < 40:
+            anomaly.append({"date": f"{year}-{month:02d}-01", "value": round(a, 2)})
+            sst.append({"date": f"{year}-{month:02d}-01", "value": round(t, 2)})
+    if len(anomaly) < 24:
+        return {"anomaly": [], "sst": []}, {"source": "synthetic", "error": f"only {len(anomaly)} rows"}
+    log.info("  OK: %d rows (latest %s)", len(anomaly), anomaly[-1]["date"])
+    return {"anomaly": anomaly, "sst": sst}, {"source": "live", "url": CPC_ERSST5_URL}
 
 
 # --------------------------------------------------------------------------
@@ -375,6 +377,7 @@ def fetch_cpc_ensodisc() -> tuple[dict, dict]:
 
     if synopsis:
         synopsis = re.sub(r"\[Figs?\.?\s*[\d\s-]+\]", "", synopsis)
+        synopsis = re.sub(r"\s+([.,;:])", "\\1", synopsis)  # space before punctuation
         synopsis = re.sub(r"\s{2,}", " ", synopsis).strip()
 
     result = {
@@ -1129,7 +1132,9 @@ def main() -> int:
         for i, m in enumerate(godas.get("months", [])):
             wwv_monthly.append({"date": f"{m}-15", "value": godas["wwv_anomaly"][i]})
 
-    nino34_monthly = endpoints.get("cpc_ersst5", sstoi.get("nino34", []))
+    ersst5 = endpoints.get("cpc_ersst5", {})
+    nino34_monthly = ersst5.get("anomaly") or sstoi.get("nino34", [])
+    nino34_sst_monthly = ersst5.get("sst", [])
     nino34_weekly = weekly.get("nino34", [])
     oni_monthly = oni
     soi_monthly = soi
@@ -1156,6 +1161,7 @@ def main() -> int:
         "schema_version": VERSION,
         "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "nino34_monthly": nino34_monthly,
+        "nino34_sst_monthly": nino34_sst_monthly,
         "nino_regions_monthly_oi": sstoi,
         "nino34_weekly": nino34_weekly[-52:],
         "oni_monthly": oni_monthly,

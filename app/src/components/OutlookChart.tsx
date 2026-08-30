@@ -39,7 +39,7 @@ export function buildOutlookRows(probabilities: SeasonProbability[], generatedAt
 
     const yy = (d: Date) => String(d.getUTCFullYear() % 100).padStart(2, "0");
 
-    return ordered.slice(idx, idx + 6).map(season => {
+    return ordered.slice(idx, idx + 7).map(season => {
       const prob = bySeason.get(season);
       if (!prob) return null;
       const k = ordered.indexOf(season) - idx;

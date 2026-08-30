@@ -123,9 +123,10 @@ def test_ersst5_parser(monkeypatch):
     monkeypatch.setattr(fd, "fetch_text", lambda url, **kw: make_ersst())
     data, meta = fd.fetch_cpc_ersst5()
     assert meta["source"] == "live"
-    assert data[-1] == {"date": "2026-06-01", "value": 1.44}
-    assert data[0] == {"date": "1950-01-01", "value": 0.4}
-    assert len(data) == 41
+    assert data["anomaly"][-1] == {"date": "2026-06-01", "value": 1.44}
+    assert data["anomaly"][0] == {"date": "1950-01-01", "value": 0.4}
+    assert data["sst"][-1] == {"date": "2026-06-01", "value": 29.17}
+    assert len(data["anomaly"]) == 41
 
 
 def test_weekly_parser(monkeypatch):

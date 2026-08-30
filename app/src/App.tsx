@@ -81,7 +81,7 @@ export default function App() {
     const chanceRaw = st.probabilities?.very_strong_chance || null;
     const chance = chanceRaw ? (chanceRaw[0].toLowerCase() + chanceRaw.slice(1)) : null;
     const headline = chance
-      ? `El Niño strengthens; ${chance} chance of a very strong event this winter`
+      ? `El Niño strengthens; a very strong event is expected this winter`
       : `El Niño advisory active`;
 
     const monthlyLatest = monthly.length ? monthly[monthly.length - 1] : null;
@@ -93,11 +93,7 @@ export default function App() {
       : "";
     const monthlyVal = monthlyLatest?.value ?? null;
 
-    let lead = `The Niño-3.4 sea temperature anomaly reached ${monthlyVal !== null ? fmtSigned(monthlyVal) : "—"} in ${monthLab} 2026` +
-      (mDelta !== null
-        ? `, ${mDelta >= 0 ? "up" : "down"} ${Math.abs(mDelta).toFixed(1)}°C on the month before.`
-        : ".");
-    lead += ` The U.S. Climate Prediction Center puts the chance of a very strong El Niño this fall and winter ${chance || "high"}.`;
+    const lead = "";  // replaced by the official statement as the intro
 
     // --- key figures
     const oni = cur.oni;
@@ -120,11 +116,17 @@ export default function App() {
 
     // -- plain-language statements for a general audience;
     //    technical names stay, small, underneath.
+    // absolute sea temperature NOW (official ERSST series) with °F for general readers
+    const sstNow = d.nino34_sst_monthly?.length
+      ? d.nino34_sst_monthly[d.nino34_sst_monthly.length - 1]
+      : null;
+    const sstNowLab = sstNow ? `${sstNow.value.toFixed(1)}°C (${((sstNow.value * 9) / 5 + 32).toFixed(1)}°F)` : "—";
+
     const statements = [
       {
         head: "Warmer than normal",
         value: monthlyVal !== null ? fmtSigned(monthlyVal) : "—",
-        sub: `Sea temperature in the eastern Pacific, ${monthLab} 2026 (Niño-3.4 region)`,
+        sub: `Eastern Pacific now ${sstNowLab} · ${monthLab} 2026 (Niño-3.4 region)`,
       },
       {
         head: "Officially: a moderate El Niño",
@@ -132,16 +134,16 @@ export default function App() {
         sub: `3-month index, May–July 2026 (ONI)`,
       },
       {
-        head: "Extra heat stored under the surface",
+        head: "Extra heat stored below the surface",
         value: wwv ? fmtSigned(wwv.value, 2) : "—",
-        sub: `Upper 300 m of the eastern Pacific, ${wwv ? MONTH_FULL[new Date(wwv.date + "T00:00:00Z").getUTCMonth()] : ""} 2026 (warm water volume)`,
+        sub: `Warm water volume, July 2026 (upper 300 m)`,
       },
     ];
 
     const techLine = [
-      weekly ? `weekly index +${weekly.value.toFixed(1)}°C (${weeklyDate})` : null,
-      mei ? `ocean heat index (MEI) ${mei.value >= 0 ? "+" : ""}${mei.value.toFixed(2)}` : null,
-      thermoVal ? `warm-water ceiling ${thermoVal} at 100°W` : null,
+      weekly ? `Weekly index +${weekly.value.toFixed(1)}°C (${weeklyDate})` : null,
+      mei ? `MEI +${mei.value >= 0 ? "" : "−"}${Math.abs(mei.value).toFixed(2)}` : null,
+      thermoVal ? `Thermocline ${thermoVal} (100°W)` : null,
     ].filter(Boolean).join(" · ");
 
     // --- chart 1 conclusion (same official series on both sides)
@@ -172,13 +174,13 @@ export default function App() {
       const MONTHS_SHORT_FC = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const peakLabel = `${MONTHS_SHORT_FC[parseInt(mm[1], 10) - 1]} ${mm[0]}`;
       forecastSummary =
-        `Models forecast the Pacific to peak at +${fc.mean[peak].toFixed(1)}°C around ${peakLabel} — a very strong event (models: ${fc.model_count}, range +${fc.min[peak].toFixed(1)} to +${fc.max[peak].toFixed(1)}°C).`;
+        `Forecast: +${fc.mean[peak].toFixed(1)}°C peak in ${peakLabel} (${fc.model_count}-model mean, range +${fc.min[peak].toFixed(1)}–+${fc.max[peak].toFixed(1)}°C).`;
     }
 
     // --- statement: first two sentences only
     const synopsis = (st.synopsis || "").replace(/\s+/g, " ").trim();
     const sents = synopsis.split(/(?<=[.!?])\s+/).filter(Boolean);
-    const quote = sents.slice(0, 2).join(" ") + (sents.length > 2 ? " …" : "");
+    const quote = sents.slice(0, 4).join(" ") + (sents.length > 4 ? " …" : "");
 
     return { headline, lead, statements, techLine, refYear, cmpText, forecastSummary, quote, st, monthly,
              outlookRows: buildOutlookRows(d.enso_probabilities, d.generated_at),
@@ -212,14 +214,22 @@ export default function App() {
     <main className="bg-white text-gray-900">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <article className="py-10">
-          {/* headline + lead */}
-
-          <h1 className="max-w-4xl text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
+          {/* headline + official statement as the intro */}
+          <h1 className="max-w-4xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
             {derived.headline}
           </h1>
-          <p className="mt-6 max-w-3xl text-lg font-semibold leading-snug text-gray-900 sm:text-xl">
-            {derived.lead}
-          </p>
+
+          <section className="mt-8 max-w-3xl">
+            <blockquote className="border-l-2 border-gray-900 pl-4 text-justify text-lg leading-relaxed text-gray-800">
+              “{derived.quote}”
+            </blockquote>
+            <p className="mt-3 text-sm text-gray-500">
+              NOAA Climate Prediction Center, {st.issued}.{" "}
+              <a href={st.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-gray-900">
+                Full statement
+              </a>
+            </p>
+          </section>
 
           {/* where things stand — plain language, technical names underneath */}
           <section className="mt-12 border-t border-gray-200 pt-8">
@@ -230,7 +240,7 @@ export default function App() {
                   <div className="h-[3px] w-6 bg-[#DC2626]" />
                   <div className="mt-3 min-h-5 text-sm font-semibold text-gray-900">{st_.head}</div>
                   <div className="mt-1 text-3xl font-bold tracking-tight tabular-nums">{st_.value}</div>
-                  <div className="mt-2 min-h-8 text-xs leading-4 text-gray-500">{st_.sub}</div>
+                  <div className="mt-2 min-h-8 text-justify text-xs leading-4 text-gray-500">{st_.sub}</div>
                 </div>
               ))}
             </div>
@@ -242,62 +252,47 @@ export default function App() {
           {/* 1 — how bad is it */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How bad is it?</h2>
-            <p className="mt-1 max-w-3xl text-base text-gray-600">{derived.cmpText}</p>
+            <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.cmpText}</p>
             <AnomalyChart monthly={monthly} currentYear={currentYear} referenceYear={derived.refYear} />
             <p className="mt-3 max-w-3xl text-sm text-gray-500">
-              Monthly Niño-3.4 anomaly, °C (official CPC ERSST series, 1991–2020 mean). {derived.refYear} was the strongest previous event.
+              Monthly Niño-3.4 anomaly, °C vs 1991–2020 (official CPC ERSST series).
             </p>
           </section>
 
           {/* 2 — what is predicted (observed vs forecast water temperature) */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">What is predicted?</h2>
-            <p className="mt-1 max-w-3xl text-base text-gray-600">{derived.forecastSummary}</p>
+            <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.forecastSummary}</p>
             <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
-            <p className="mt-3 max-w-3xl text-sm text-gray-500">
-              NOAA CPC NMME real-time multi-model forecast, issued {data.nino34_forecast?.init || "—"};
-              {data.nino34_forecast?.model_count ? ` ${data.nino34_forecast.model_count} models,` : ""} range shown in light red.
-              Raw model values; models tend to run high during strong events. The official CPC statement
-              is the reference.
+            <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
+              NOAA CPC NMME model ensemble, issued {data.nino34_forecast?.init || "—"} ({data.nino34_forecast?.model_count ?? 0} models); raw values, see the statement above.
             </p>
           </section>
 
           {/* 3 — what are the consequences */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">What are the consequences?</h2>
-            <p className="mt-1 max-w-3xl text-base text-gray-600">
-              Drought in Australia, Southeast Asia, India and southern Africa; heavy rain and flooding on the Pacific coast of South America; more rain in East Africa and southern South America.
-              El Niño’s effect on Europe is weak and indirect, with no consistent seasonal signal.
-            </p>
+            <ul className="mt-1 max-w-3xl space-y-1 text-justify text-base text-gray-700">
+              <li><strong className="text-gray-900">Drier:</strong> Australia, Southeast Asia, India, southern Africa, northern South America.</li>
+              <li><strong className="text-gray-900">Wetter:</strong> Peru and Ecuador (flooding), East Africa, southern South America.</li>
+              <li><strong className="text-gray-900">Europe:</strong> no consistent seasonal effect.</li>
+            </ul>
             <ImpactMap />
-            <p className="mt-3 max-w-3xl text-sm text-gray-500">
-              Well-documented El Niño effects (NOAA/IRI consensus). The precipitation model forecast is currently unavailable, so the zones are drawn schematically.
+            <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
+              Well-documented pattern (NOAA/IRI consensus); model forecast maps are not yet openly machine-readable.
             </p>
           </section>
 
           {/* 4 — how long does this last */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How long does this last?</h2>
-            <p className="mt-1 max-w-3xl text-base text-gray-600">{outlookSummary(derived.outlookRows)}</p>
+            <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{outlookSummary(derived.outlookRows)}</p>
             <OutlookChart probabilities={derived.probs} generatedAt={generatedAt} />
-            <p className="mt-3 max-w-3xl text-sm text-gray-500">
+            <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
               Official NOAA CPC probability of El Niño per three-month season, {derived.st.issued}.
             </p>
           </section>
 
-          {/* official statement */}
-          <section className="mt-16">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">Official statement</h2>
-            <blockquote className="mt-6 max-w-3xl border-l-2 border-gray-900 pl-4 text-lg leading-relaxed text-gray-800">
-              “{derived.quote}”
-            </blockquote>
-            <p className="mt-3 text-sm text-gray-500">
-              NOAA Climate Prediction Center, {st.issued}.{" "}
-              <a href={st.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-gray-900">
-                Full statement
-              </a>
-            </p>
-          </section>
         </article>
 
         {/* footer */}
@@ -307,8 +302,8 @@ export default function App() {
             <a className="underline underline-offset-2 hover:text-gray-900" href="data.json">raw data</a>
             <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml">official discussion</a>
             <a className="underline underline-offset-2 hover:text-gray-900" target="_blank" rel="noopener noreferrer" href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/">model forecast</a>
+            <span className="text-gray-400">— independent project, not affiliated with NOAA</span>
           </div>
-          <p className="mt-2 text-xs text-gray-400">Independent monitoring project, not affiliated with NOAA.</p>
         </footer>
       </div>
     </main>

@@ -29,7 +29,7 @@ function monthLabel(idx: number): string {
 }
 
 export function PredictedChart({ observed, forecast }: Props) {
-  const { x, y, obsPath, obsPts, meanPath, bandPath, gridYs, ticks } = useMemo(() => {
+  const { x, y, obsPath, obsPts, meanPath, bandPath, connectPath, gridYs, ticks } = useMemo(() => {
     const obs = observed.slice(-12);
     const months = forecast.months;
     const n0 = obs.length ? monthIndex(obs[0].date) : monthIndex(months[0] + "-01");
@@ -48,6 +48,11 @@ export function PredictedChart({ observed, forecast }: Props) {
       max: y(forecast.max[i] ?? 0),
     }));
     const meanPath = fPts.length ? "M" + fPts.map(p => `${p.x},${p.mean}`).join(" L") : "";
+    // dashed connector: last observed month -> first forecast month
+    const connectPath =
+      obsPts.length && fPts.length
+        ? `M${obsPts[obsPts.length - 1].x},${obsPts[obsPts.length - 1].y} L${fPts[0].x},${fPts[0].mean}`
+        : "";
     const bandPath = fPts.length
       ? "M" + fPts.map(p => `${p.x},${p.max}`).join(" L")
         + " L" + [...fPts].reverse().map(p => `${p.x},${p.min}`).join(" L") + " Z"
@@ -57,7 +62,7 @@ export function PredictedChart({ observed, forecast }: Props) {
     const ticks: { x: number; label: string }[] = [];
     for (let idx = n0; idx <= n1; idx += 3) ticks.push({ x: x(idx), label: monthLabel(idx) });
 
-    return { x, y, obsPath, obsPts, meanPath, bandPath, gridYs, ticks };
+    return { x, y, obsPath, obsPts, meanPath, bandPath, connectPath, gridYs, ticks };
   }, [observed, forecast]);
 
   return (
@@ -75,6 +80,9 @@ export function PredictedChart({ observed, forecast }: Props) {
 
         {/* multi-model range band */}
         {bandPath && <path d={bandPath} fill="#DC2626" fillOpacity="0.10" stroke="none" />}
+
+        {/* observed-to-forecast connector */}
+        {connectPath && <path d={connectPath} fill="none" stroke="#9CA3AF" strokeWidth="1" strokeDasharray="4,3" />}
 
         {/* observed */}
         <path d={obsPath} fill="none" stroke="#111827" strokeWidth="2" />

@@ -116,7 +116,7 @@ export function ImpactMap() {
           />
         ))}
       </svg>
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700">
+      <div className="mt-3 flex flex-wrap justify-center gap-x-8 gap-y-1 text-xs text-gray-700">
         {zonePaths.map(z => (
           <span key={z.label} className="inline-flex items-center gap-2">
             <span

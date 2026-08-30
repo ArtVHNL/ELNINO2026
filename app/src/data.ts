@@ -101,6 +101,7 @@ export interface EnsoDashboardData {
   schema_version: string;
   generated_at: string;
   nino34_monthly: IndexValue[];
+  nino34_sst_monthly?: IndexValue[];
   nino34_weekly: IndexValue[];
   oni_monthly: OniValue[];
   soi_monthly: IndexValue[];
