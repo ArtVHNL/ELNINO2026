@@ -70,6 +70,18 @@ const en = {
   loadingMap: "Loading map…",
   chance90: "greater than 90%",
   language: "Language",
+  methodologyNav: "Methodology",
+  backHome: "Back to the dashboard",
+  methodologyTitle: "Methodology — where every number comes from",
+  methodologyBlocks: [
+    { heading: "Who runs this", body: "An independent monitoring project. Not affiliated with NOAA; every figure cites its source on this page." },
+    { heading: "Data sources", body: "NOAA CPC (monthly ERSST Niño-3.4 and weekly indices, ONI, SOI), NOAA PSL (MEI v2, GODAS ocean fields), official CPC ENSO probabilities, NMME multi-model forecasts (NOAA) and the IRI forecast page." },
+    { heading: "Update cadence", body: "The pipeline runs automatically twice a day (06:00 and 18:00 UTC); the site redeploys on every change. The data timestamp is shown in the dashboard." },
+    { heading: "Provenance & honest fallbacks", body: "Every data block is labelled live, derived or synthetic. When an official source is temporarily unavailable, the block is clearly marked as fallback — never presented as a measurement." },
+    { heading: "How the charts are built", body: "The comparison chart aligns each event at its first month above +0.5 °C (ONI). The forecast chart is the 6-model NMME mean and range over the Niño-3.4 box (5°S–5°N, 190–240°E), issued monthly." },
+    { heading: "Impact map", body: "Canonical El Niño effects per country (NOAA/IRI consensus). Countries without a documented signal are shown as little change." },
+    { heading: "Open data", body: "data.json contains everything the page shows; meta.json records the health of each source. Reuse freely with attribution." },
+  ],
 };
 
 const ZH_MONTHS = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
@@ -126,6 +138,18 @@ const zh: typeof en = {
   loadingMap: "正在加载地图…",
   chance90: "90%以上",
   language: "语言",
+  methodologyNav: "方法说明",
+  backHome: "返回仪表盘",
+  methodologyTitle: "方法说明 —— 每个数字的来源",
+  methodologyBlocks: [
+    { heading: "谁在运行", body: "独立监测项目，与NOAA无关；页面中每个数字都注明了来源。" },
+    { heading: "数据源", body: "NOAA CPC（月度ERSST尼诺3.4和周度指数、ONI、SOI）、NOAA PSL（MEI v2、GODAS海洋场）、CPC官方ENSO概率、NMME多模型预报及IRI预报页面。" },
+    { heading: "更新频率", body: "数据管线每天自动运行两次（06:00和18:00 UTC），站点随每次变化自动重新部署；数据时间戳显示在仪表盘中。" },
+    { heading: "溯源与诚实的回退", body: "每个数据块都标记为实时、派生或回退。当官方源暂时不可用时，该块会明确标注为回退值——绝不会冒充真实测量。" },
+    { heading: "图表如何构建", body: "对比图按事件首次超过+0.5°C（ONI）的月份对齐。预报图是NMME六个模型在尼诺3.4区域（5°S–5°N，190–240°E）的平均与范围，每月发布。" },
+    { heading: "影响地图", body: "各国厄尔尼诺影响为典型模式（NOAA/IRI共识）。无明确信号的地区显示为“变化不大”。" },
+    { heading: "开放数据", body: "data.json 包含页面显示的全部内容；meta.json 记录每个数据源的健康状态。欢迎注明出处自由使用。" },
+  ],
 };
 
 const HI_MONTHS = ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"];
@@ -182,6 +206,18 @@ const hi: typeof en = {
   loadingMap: "मानचित्र लोड हो रहा है…",
   chance90: "90% से अधिक",
   language: "भाषा",
+  methodologyNav: "पद्धति",
+  backHome: "डैशबोर्ड पर वापस",
+  methodologyTitle: "पद्धति — हर अंक कहाँ से आता है",
+  methodologyBlocks: [
+    { heading: "यह कौन चलाता है", body: "एक स्वतंत्र निगरानी परियोजना। NOAA से संबद्ध नहीं; हर आंकड़े का स्रोत पृष्ठ पर दिया गया है।" },
+    { heading: "डेटा स्रोत", body: "NOAA CPC (मासिक ERSST निनो-3.4 और साप्ताहिक सूचकांक, ONI, SOI), NOAA PSL (MEI v2, GODAS महासागर फ़ील्ड), CPC आधिकारिक ENSO संभावनाएँ, NMME बहु-मॉडल पूर्वानुमान और IRI पूर्वानुमान पृष्ठ।" },
+    { heading: "अद्यतन आवृत्ति", body: "पाइपलाइन दिन में दो बार (06:00 और 18:00 UTC) स्वचालित रूप से चलती है; हर बदलाव पर साइट फिर से तैनात होती है। टाइमस्टैम्प डैशबोर्ड में दिखाई देता है।" },
+    { heading: "स्रोत-पारदर्शिता और ईमानदार फ़ॉलबैक", body: "हर डेटा ब्लॉक live, derived या synthetic लेबल होता है। जब कोई आधिकारिक स्रोत अस्थायी रूप से अनुपलब्ध हो, तो ब्लॉक स्पष्ट रूप से फ़ॉलबैक के रूप में चिह्नित होता है — कभी भी वास्तविक माप नहीं।" },
+    { heading: "चार्ट कैसे बनते हैं", body: "तुलना चार्ट हर घटना को +0.5°C (ONI) से ऊपर पहले महीने पर संरेखित करता है। पूर्वानुमान चार्ट निनो-3.4 क्षेत्र (5°S–5°N, 190–240°E) पर 6-मॉडल NMME औसत और सीमा है, मासिक जारी।" },
+    { heading: "प्रभाव मानचित्र", body: "प्रत्येक देश के लिए विशिष्ट एल नीनो प्रभाव (NOAA/IRI आम सहमति)। बिना दस्तावेजित संकेत वाले देश 'थोड़ा बदलाव' के रूप में दिखते हैं।" },
+    { heading: "खुला डेटा", body: "data.json में वह सब है जो पृष्ठ दिखाता है; meta.json हर स्रोत की स्थिति दर्ज करता है। उपयोग करें, स्रोत बताएं।" },
+  ],
 };
 
 const ES_MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -239,6 +275,18 @@ const es: typeof en = {
   loadingMap: "Cargando mapa…",
   chance90: "más del 90%",
   language: "Idioma",
+  methodologyNav: "Metodología",
+  backHome: "Volver al panel",
+  methodologyTitle: "Metodología — de dónde sale cada cifra",
+  methodologyBlocks: [
+    { heading: "Quién lo gestiona", body: "Un proyecto de seguimiento independiente. No afiliado a NOAA; cada cifra cita su fuente en esta página." },
+    { heading: "Fuentes de datos", body: "NOAA CPC (Niño-3.4 mensual ERSST e índices semanales, ONI, SOI), NOAA PSL (MEI v2, campos oceánicos GODAS), probabilidades oficiales de ENSO del CPC, previsiones multimodelo NMME y la página de previsión del IRI." },
+    { heading: "Frecuencia de actualización", body: "El pipeline se ejecuta automáticamente dos veces al día (06:00 y 18:00 UTC); el sitio se vuelve a desplegar en cada cambio. La fecha de los datos se muestra en el panel." },
+    { heading: "Procedencia y sustituciones honestas", body: "Cada bloque está etiquetado live, derived o synthetic. Cuando una fuente oficial no está disponible temporalmente, el bloque se marca claramente como sustituto — nunca como medición real." },
+    { heading: "Cómo se construyen los gráficos", body: "El gráfico de comparación alinea cada evento en su primer mes por encima de +0.5 °C (ONI). El gráfico de previsión es la media y el rango de los 6 modelos NMME sobre la caja Niño-3.4 (5°S–5°N, 190–240°E), publicado mensualmente." },
+    { heading: "Mapa de impactos", body: "Efectos canónicos de El Niño por país (consenso NOAA/IRI). Los países sin señal documentada aparecen como cambio leve." },
+    { heading: "Datos abiertos", body: "data.json contiene todo lo que muestra la página; meta.json registra la salud de cada fuente. Reutilízalo libremente citando la fuente." },
+  ],
 };
 
 const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
@@ -295,6 +343,18 @@ const ar: typeof en = {
   loadingMap: "جارٍ تحميل الخريطة…",
   chance90: "أكثر من 90%",
   language: "اللغة",
+  methodologyNav: "المنهجية",
+  backHome: "العودة إلى لوحة البيانات",
+  methodologyTitle: "المنهجية — من أين يأتي كل رقم",
+  methodologyBlocks: [
+    { heading: "من يدير هذا", body: "مشروع رصد مستقل. غير تابع لمؤسسة NOAA؛ كل رقم يذكر مصدره في هذه الصفحة." },
+    { heading: "مصادر البيانات", body: "NOAA CPC (نينو 3.4 الشهري ERSST والمؤشرات الأسبوعية، ONI، SOI)، NOAA PSL (MEI v2 وحقول المحيط GODAS)، الاحتمالات الرسمية لظاهرة ENSO من CPC، توقعات نماذج NMME المتعددة وصفحة توقعات IRI." },
+    { heading: "وتيرة التحديث", body: "يعمل خط المعالجة تلقائيًا مرتين يوميًا (06:00 و18:00 بالتوقيت العالمي)، ويُعاد نشر الموقع عند كل تغيير. يظهر وقت البيانات في اللوحة." },
+    { heading: "التوثيق والبدائل الصادقة", body: "كل كتلة بيانات موسومة بـ live أو derived أو synthetic. عندما يكون المصدر الرسمي غير متاح مؤقتًا، تُوسم الكتلة بوضوح كبديل — ولا تُعرض أبدًا كقياس حقيقي." },
+    { heading: "كيف تُبنى الرسوم", body: "رسم المقارنة يحاذي كل حدث عند أول شهر يتجاوز +0.5 درجة (ONI). رسم التوقعات هو متوسط ونطاق نماذج NMME الستة فوق منطقة نينو 3.4 (5°S–5°N، 190–240°E)، ويصدر شهريًا." },
+    { heading: "خريطة الآثار", body: "آثار إل نينو النمطية لكل بلد (إجماع NOAA/IRI). البلدان بدون إشارة موثقة تظهر كـ«تغيّر طفيف»." },
+    { heading: "بيانات مفتوحة", body: "data.json يحتوي كل ما تعرضه الصفحة؛ وmeta.json يسجل صحة كل مصدر. أعد الاستخدام بحرية مع ذكر المصدر." },
+  ],
 };
 
 export const MESSAGES: Record<Lang, typeof en> = { en, zh, hi, es, ar };

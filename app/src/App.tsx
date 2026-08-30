@@ -35,6 +35,7 @@ export default function App() {
   const { lang, setLang, t } = useI18n();
   const T = (key: string, vars?: Record<string, string>) => msg(t, key, vars);
   const [langOpen, setLangOpen] = _useState(false);
+  const [view, setView] = _useState<"home" | "methodology">("home");
   const [data, setData] = useState<EnsoDashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -202,39 +203,59 @@ export default function App() {
     <main className="bg-white text-gray-900">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <article className="py-10">
-          {/* language selector — minimal, top right */}
-          <div className="relative flex justify-end">
-            <button
-              type="button"
-              onClick={() => setLangOpen(o => !o)}
-              className="border border-gray-300 px-2.5 py-1 text-xs font-medium hover:border-gray-900"
-              aria-haspopup="listbox"
-            >
-              {LANGS.find(l => l.code === lang)?.short}
-            </button>
-            {langOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setLangOpen(false)} />
-                <div className="absolute end-0 z-20 mt-8 border border-gray-200 bg-white py-1 text-sm shadow-sm">
-                  {LANGS.map(l => (
-                    <button
-                      key={l.code}
-                      type="button"
-                      onClick={() => { setLang(l.code); setLangOpen(false); }}
-                      className={`block w-full px-4 py-1.5 text-start hover:bg-gray-50 ${l.code === lang ? "font-bold text-gray-900" : "text-gray-600"}`}
-                    >
-                      {l.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+          {/* title on the left; language button + methodology link on the same line, right */}
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <h1 className="max-w-4xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+              {view === "home" ? derived.headline : T("methodologyNav")}
+            </h1>
+            <div className="relative flex shrink-0 flex-col items-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLangOpen(o => !o)}
+                className="border border-gray-300 px-2.5 py-1 text-xs font-medium hover:border-gray-900"
+                aria-haspopup="listbox"
+              >
+                {LANGS.find(l => l.code === lang)?.short}
+              </button>
+              {langOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setLangOpen(false)} />
+                  <div className="absolute end-0 z-20 mt-8 border border-gray-200 bg-white py-1 text-sm shadow-sm">
+                    {LANGS.map(l => (
+                      <button
+                        key={l.code}
+                        type="button"
+                        onClick={() => { setLang(l.code); setLangOpen(false); }}
+                        className={`block w-full px-4 py-1.5 text-start hover:bg-gray-50 ${l.code === lang ? "font-bold text-gray-900" : "text-gray-600"}`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {view === "home" ? (
+                <button
+                  type="button"
+                  onClick={() => setView("methodology")}
+                  className="text-xs text-gray-500 underline underline-offset-2 hover:text-gray-900"
+                >
+                  {T("methodologyNav")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setView("home")}
+                  className="text-xs text-gray-500 underline underline-offset-2 hover:text-gray-900"
+                >
+                  {T("backHome")}
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* headline + official statement as the intro */}
-          <h1 className="mt-6 max-w-4xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
-            {derived.headline}
-          </h1>
+          {view === "home" ? (
+            <>
 
           <section className="mt-6 max-w-4xl">
             <p className="text-justify text-lg leading-relaxed text-gray-800">
@@ -301,10 +322,26 @@ export default function App() {
               {T("outlookCaption", { date: derived.st.issued || "" })}
             </p>
           </section>
-
+            </>
+          ) : (
+            <section className="mt-10 max-w-3xl space-y-7">
+              <h2 className="text-2xl font-bold tracking-tight">{T("methodologyTitle")}</h2>
+              {((t as any).methodologyBlocks as { heading: string; body: string }[]).map(b => (
+                <div key={b.heading}>
+                  <h3 className="text-base font-bold">{b.heading}</h3>
+                  <p className="mt-1 text-justify text-sm leading-relaxed text-gray-600">{b.body}</p>
+                </div>
+              ))}
+              <p className="text-sm text-gray-500">
+                <a className="underline underline-offset-2 hover:text-gray-900" href="data.json">data.json</a>
+                {" · "}
+                <a className="underline underline-offset-2 hover:text-gray-900" href="meta.json">meta.json</a>
+              </p>
+            </section>
+          )}
         </article>
 
-        {/* footer */}
+        {view === "home" && (
         <footer className="mt-9 border-t border-gray-200 pt-5 pb-6 text-sm text-gray-500">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span>{T("footer1")}</span>
@@ -314,6 +351,7 @@ export default function App() {
             <span className="text-gray-400">{T("footerNote")}</span>
           </div>
         </footer>
+        )}
       </div>
     </main>
   );
