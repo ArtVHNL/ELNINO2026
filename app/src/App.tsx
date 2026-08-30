@@ -105,9 +105,9 @@ export default function App() {
         sub: `Sea temperature in the eastern Pacific, ${monthLab} 2026 (Niño-3.4 region)`,
       },
       {
-        head: "Officially: El Niño - moderate and building",
+        head: "Officially: a moderate El Niño",
         value: oni ? fmtSigned(oni.value, 2) : "—",
-        sub: `3-month index, ${oni ? `${oni.season} ${oni.year}` : ""} (ONI)`,
+        sub: `3-month index, May–July 2026 (ONI)`,
       },
       {
         head: "Extra heat stored under the surface",
