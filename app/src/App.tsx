@@ -8,6 +8,7 @@ import { AlignedComparison } from "./components/AlignedComparison";
 import { ImpactMap } from "./components/ImpactMap";
 import { OutlookChart } from "./components/OutlookChart";
 import { PredictedChart } from "./components/PredictedChart";
+import { SourceMap } from "./components/SourceMap";
 
 const MONTH_FULL = [
   "January", "February", "March", "April", "May", "June",
@@ -225,6 +226,7 @@ export default function App() {
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
               The three strongest El Niños on record, aligned at the month each event became active. Values: NOAA CPC monthly Niño-3.4 anomaly (ERSST, 1991–2020 mean).
             </p>
+            <SourceMap />
           </section>
 
           {/* 2 — what is predicted (observed vs forecast water temperature) */}
@@ -241,8 +243,8 @@ export default function App() {
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">What are the consequences?</h2>
             <ul className="mt-1 max-w-3xl space-y-1 text-justify text-base text-gray-700">
-              <li><strong className="text-gray-900">Drier:</strong> Australia, Southeast Asia, India, southern Africa, northern South America.</li>
-              <li><strong className="text-gray-900">Wetter:</strong> Peru and Ecuador (flooding), East Africa, southern South America.</li>
+              <li><strong className="text-gray-900">Drier:</strong> Australia, Southeast Asia, India, southern Africa, northern South America — grain and water stress, more fire risk in Australia and Indonesia.</li>
+              <li><strong className="text-gray-900">Wetter:</strong> Peru and Ecuador (flooding, disruption to fisheries), East Africa and southern South America (above-normal rainfall, December–February).</li>
               <li><strong className="text-gray-900">Europe:</strong> barely affected — winters are occasionally milder, but there is no reliable pattern.</li>
             </ul>
             <ImpactMap />
