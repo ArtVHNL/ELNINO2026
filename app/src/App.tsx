@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnsoDashboardData, fetchLiveEnsoData, ComparisonEvent } from "./data";
 import { AlignedComparison } from "./components/AlignedComparison";
+import { Thermometer } from "./components/Thermometer";
 import { ImpactMap } from "./components/ImpactMap";
 import { OutlookChart } from "./components/OutlookChart";
 import { PredictedChart } from "./components/PredictedChart";
@@ -115,17 +116,17 @@ export default function App() {
       {
         head: "Warmer than normal",
         value: monthlyVal !== null ? fmtSigned(monthlyVal) : "—",
-        sub: `Eastern Pacific now ${sstNowLab} · ${monthLab} 2026 (Niño-3.4 region)`,
+        sub: `Eastern Pacific water, ${monthLab} 2026 (Niño-3.4 region)`,
       },
       {
         head: "At the moment: a moderate El Niño",
         value: oni ? fmtSigned(oni.value, 2) : "—",
-        sub: `3-month index, May–July 2026 (ONI)`,
+        sub: `Official 3-month index (ONI), May–July 2026`,
       },
       {
         head: "Warm water below the surface is building",
         value: wwv ? fmtSigned(wwv.value, 2) : "—",
-        sub: `2.2°C warmer than normal in the upper 300 m — an anomaly, not the water temperature itself (July 2026)`,
+        sub: `2.2°C more heat than normal in the upper 300 m, July 2026 — an anomaly, not the water temperature`,
       },
     ];
 
@@ -156,6 +157,7 @@ export default function App() {
       (fcPeak ? ` Six international climate models expect the water temperature to peak at +${fcPeak.v.toFixed(1)}°C around ${fcPeak.label}.` : "");
 
     return { headline, lead, intro, statements, forecastSummary, st, monthly,
+             monthlyVal, sstNowLab, monthLab,
              currentYear: new Date(d.generated_at).getFullYear(),
              probs: d.enso_probabilities, generatedAt: d.generated_at };
   }, [d]);
@@ -206,15 +208,19 @@ export default function App() {
           {/* where things stand — plain language, technical names underneath */}
           <section className="mt-12 border-t border-gray-200 pt-8">
             <h2 className="text-2xl font-bold tracking-tight">Where things stand</h2>
-            <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-10 md:grid-cols-3">
-              {derived.statements.map(st_ => (
-                <div key={st_.head} className="flex flex-col">
-                  <div className="h-[3px] w-6 bg-[#DC2626]" />
-                  <div className="mt-3 min-h-5 text-sm font-semibold text-gray-900">{st_.head}</div>
-                  <div className="mt-1 text-3xl font-bold tracking-tight tabular-nums">{st_.value}</div>
-                  <div className="mt-2 min-h-8 text-justify text-xs leading-4 text-gray-500">{st_.sub}</div>
-                </div>
-              ))}
+            <div className="mt-6 max-w-3xl">
+              <Thermometer
+                value={derived.monthlyVal ?? 0}
+                absoluteLabel={derived.sstNowLab}
+                valueLab={derived.monthLab}
+              />
+              <div className="mt-5 space-y-2 text-justify text-sm text-gray-600">
+                {derived.statements.slice(1).map((st_, i) => (
+                  <p key={st_.head}>
+                    <strong className="text-gray-900">{st_.head}</strong> — {st_.value} · {st_.sub}
+                  </p>
+                ))}
+              </div>
             </div>
           </section>
 
