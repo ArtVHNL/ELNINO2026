@@ -227,17 +227,13 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <p className="mt-6 max-w-3xl text-xs text-gray-500">
-              Scale 0–3°C above normal; thresholds: +0.5 weak, +1.0 moderate, +1.5 strong, +2.0 very strong (NOAA CPC).
-            </p>
+
           </section>
 
           {/* 1 — how bad is it */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How bad is it?</h2>
-            <div className="mt-3 max-w-3xl">
-              <AlignedComparison monthly={monthly} events={data.comparison.events} />
-            </div>
+            <AlignedComparison monthly={monthly} events={data.comparison.events} />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
               The three strongest El Niños on record, aligned at the month each event became active. Values: NOAA CPC monthly Niño-3.4 anomaly (ERSST, 1991–2020 mean).
             </p>
@@ -247,9 +243,7 @@ export default function App() {
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">What is predicted?</h2>
             <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.forecastSummary}</p>
-            <div className="mt-3 max-w-3xl">
-              <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
-            </div>
+            <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
               Six international climate models (NOAA NMME project), issued {data.nino34_forecast?.init || "—"}.
             </p>
