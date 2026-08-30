@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EnsoDashboardData, fetchLiveEnsoData, ComparisonEvent } from "./data";
 import { AlignedComparison } from "./components/AlignedComparison";
-import { Thermometer } from "./components/Thermometer";
+import { MiniThermometer } from "./components/MiniThermometer";
 import { ImpactMap } from "./components/ImpactMap";
 import { OutlookChart } from "./components/OutlookChart";
 import { PredictedChart } from "./components/PredictedChart";
@@ -112,21 +112,27 @@ export default function App() {
       : null;
     const sstNowLab = sstNow ? `${sstNow.value.toFixed(1)}°C (${((sstNow.value * 9) / 5 + 32).toFixed(1)}°F)` : "—";
 
-    const statements = [
+    const thermos = [
       {
-        head: "Warmer than normal",
-        value: monthlyVal !== null ? fmtSigned(monthlyVal) : "—",
-        sub: `Eastern Pacific water, ${monthLab} 2026 (Niño-3.4 region)`,
+        label: "Warmer than normal",
+        value: monthlyVal ?? 0,
+        suffix: "°C",
+        decimals: 1,
+        caption: `${monthLab} 2026 · Niño-3.4 region · water now ${sstNowLab}`,
       },
       {
-        head: "At the moment: a moderate El Niño",
-        value: oni ? fmtSigned(oni.value, 2) : "—",
-        sub: `Official 3-month index (ONI), May–July 2026`,
+        label: "Moderate El Niño",
+        value: oni?.value ?? 0,
+        suffix: "°C",
+        decimals: 2,
+        caption: `Official 3-month index (ONI), May–July 2026`,
       },
       {
-        head: "Warm water below the surface is building",
-        value: wwv ? fmtSigned(wwv.value, 2) : "—",
-        sub: `2.2°C more heat than normal in the upper 300 m, July 2026 — an anomaly, not the water temperature`,
+        label: "Warm layer below the surface",
+        value: wwv?.value ?? 0,
+        suffix: "°C",
+        decimals: 2,
+        caption: `2.2°C extra heat in the upper 300 m, July 2026`,
       },
     ];
 
@@ -156,7 +162,7 @@ export default function App() {
       ` The U.S. Climate Prediction Center keeps an El Niño Advisory and puts the chance of a very strong event this fall and winter ${chance || "high"}.` +
       (fcPeak ? ` Six international climate models expect the water temperature to peak at +${fcPeak.v.toFixed(1)}°C around ${fcPeak.label}.` : "");
 
-    return { headline, lead, intro, statements, forecastSummary, st, monthly,
+    return { headline, lead, intro, thermos, forecastSummary, st, monthly,
              monthlyVal, sstNowLab, monthLab,
              currentYear: new Date(d.generated_at).getFullYear(),
              probs: d.enso_probabilities, generatedAt: d.generated_at };
@@ -208,26 +214,30 @@ export default function App() {
           {/* where things stand — plain language, technical names underneath */}
           <section className="mt-12 border-t border-gray-200 pt-8">
             <h2 className="text-2xl font-bold tracking-tight">Where things stand</h2>
-            <div className="mt-6 max-w-3xl">
-              <Thermometer
-                value={derived.monthlyVal ?? 0}
-                absoluteLabel={derived.sstNowLab}
-                valueLab={derived.monthLab}
-              />
-              <div className="mt-5 space-y-2 text-justify text-sm text-gray-600">
-                {derived.statements.slice(1).map((st_, i) => (
-                  <p key={st_.head}>
-                    <strong className="text-gray-900">{st_.head}</strong> — {st_.value} · {st_.sub}
-                  </p>
-                ))}
-              </div>
+            <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-3">
+              {derived.thermos.map((t, i) => (
+                <div key={i}>
+                  <MiniThermometer
+                    label={t.label}
+                    value={t.value}
+                    suffix={t.suffix}
+                    decimals={t.decimals}
+                    caption={t.caption}
+                  />
+                </div>
+              ))}
             </div>
+            <p className="mt-6 max-w-3xl text-xs text-gray-500">
+              Scale 0–3°C above normal; thresholds: +0.5 weak, +1.0 moderate, +1.5 strong, +2.0 very strong (NOAA CPC).
+            </p>
           </section>
 
           {/* 1 — how bad is it */}
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">How bad is it?</h2>
-            <AlignedComparison monthly={monthly} events={data.comparison.events} />
+            <div className="mt-3 max-w-3xl">
+              <AlignedComparison monthly={monthly} events={data.comparison.events} />
+            </div>
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
               The three strongest El Niños on record, aligned at the month each event became active. Values: NOAA CPC monthly Niño-3.4 anomaly (ERSST, 1991–2020 mean).
             </p>
@@ -237,9 +247,11 @@ export default function App() {
           <section className="mt-16">
             <h2 className="text-2xl font-bold tracking-tight">What is predicted?</h2>
             <p className="mt-1 max-w-3xl text-justify text-base text-gray-600">{derived.forecastSummary}</p>
-            <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
+            <div className="mt-3 max-w-3xl">
+              <PredictedChart observed={monthly} forecast={data.nino34_forecast} />
+            </div>
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
-              Six international climate models (NOAA NMME project), issued {data.nino34_forecast?.init || "—"}. Model forecasts can run higher than reality in strong events — the official view is at the top of this page.
+              Six international climate models (NOAA NMME project), issued {data.nino34_forecast?.init || "—"}.
             </p>
           </section>
 

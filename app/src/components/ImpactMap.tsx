@@ -136,7 +136,7 @@ export function ImpactMap() {
           </span>
         ))}
       </div>
-      <p className="mt-2 text-xs text-center text-gray-400">Hover a country for its outlook.</p>
+
     </div>
   );
 }
