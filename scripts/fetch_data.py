@@ -385,7 +385,8 @@ def _dap_slice(ds_url: str, var: str, idx: tuple[slice, ...]) -> np.ndarray | No
         try:
             with netCDF4.Dataset(ds_url) as ds:
                 data = ds.variables[var][idx]
-                return np.asarray(data)
+                # GODAS uses _FillValue for land / below-bottom cells -> NaN
+                return np.ma.filled(data, np.nan).astype(np.float64)
         except Exception as e:  # noqa: BLE001
             log.warning("  DAP attempt %d failed for %s: %s", attempt + 1, ds_url[:80], e)
             time.sleep(2 * (attempt + 1))
@@ -466,7 +467,7 @@ def fetch_godas(now: datetime, out_dir: Path) -> tuple[dict, dict]:
         if hm is None:
             continue
         hm_c = hm - 273.15  # Kelvin -> °C
-        hm_latmean = hm_c.mean(axis=2)  # [time, depth, lon]
+        hm_latmean = np.nanmean(hm_c, axis=2)  # [time, depth, lon] (NaN-safe)
 
         # WWV box: [time, depth, lat, lon] -> box mean
         wwv = _dap_slice(ds_url, "pottmp",
@@ -474,7 +475,7 @@ def fetch_godas(now: datetime, out_dir: Path) -> tuple[dict, dict]:
                           slice(lo_wwv[0], lo_wwv[-1] + 1)))
         if wwv is None:
             continue
-        wwv_box = wwv.mean(axis=(2, 3))  # [time, depth]
+        wwv_box = np.nanmean(wwv, axis=(2, 3))  # [time, depth] (NaN-safe)
 
         for t in range(ntime):
             # time in GODAS files: days since 1800-01-01 (approx); derive month label
@@ -484,10 +485,12 @@ def fetch_godas(now: datetime, out_dir: Path) -> tuple[dict, dict]:
             except (ValueError, OverflowError):
                 month_label = f"{year}-{t + 1:02d}"
             months.append(month_label)
-            hm_abs.append([[round(float(v), 2) for v in row] for row in hm_latmean[t]])
-            hm_anom.append(
-                [[round(float(v), 2) for v in row] for row in _anomaly(hm_latmean[t], month_label, clim, "hm")]
-            )
+            # missing cells (land / below bottom) -> forward-fill along lon for absolute,
+            # neutral 0.0 for anomaly (documented in DATA_SCHEMA)
+            abs_row = _fill_lon(hm_latmean[t])
+            anom_row = np.nan_to_num(_anomaly(hm_latmean[t], month_label, clim, "hm"))
+            hm_abs.append([[round(float(v), 2) for v in row] for row in abs_row])
+            hm_anom.append([[round(float(v), 2) for v in row] for row in anom_row])
             # thermocline: 20°C isotherm depth per longitude
             thermo.append([_isotherm_depth(depth_arr, hm_latmean[t][:, j]) for j in range(len(lon_arr))])
             wwv_abs.append(round(float(wwv_box[t].mean()), 3))
@@ -515,6 +518,23 @@ def fetch_godas(now: datetime, out_dir: Path) -> tuple[dict, dict]:
     return result, {"source": source, "url": GODAS_BASE.format(year=now.year), "note": note}
 
 
+def _fill_lon(field: np.ndarray) -> np.ndarray:
+    """Forward-fill NaN along the last (lon) axis per row."""
+    out = np.array(field, dtype=np.float64)
+    for row in out:
+        valid = np.where(~np.isnan(row))[0]
+        if len(valid) == 0:
+            row[:] = 0.0
+            continue
+        last = valid[0]
+        for i in range(len(row)):
+            if np.isnan(row[i]):
+                row[i] = row[last]
+            else:
+                last = i
+    return out
+
+
 def _anomaly(field: np.ndarray, month_label: str, clim: dict | None, kind: str) -> np.ndarray:
     """Subtract monthly climatology if available, else return field as-is (caller labels derived)."""
     if clim is None:
@@ -532,8 +552,11 @@ def _anomaly(field: np.ndarray, month_label: str, clim: dict | None, kind: str) 
 def _isotherm_depth(depths: list[float], temp_profile: np.ndarray) -> float | None:
     """Linear interpolation of the depth where temperature crosses 20°C."""
     for i in range(len(depths) - 1):
-        if temp_profile[i] >= 20.0 >= temp_profile[i + 1]:
-            t0, t1 = temp_profile[i], temp_profile[i + 1]
+        t0v, t1v = temp_profile[i], temp_profile[i + 1]
+        if np.isnan(t0v) or np.isnan(t1v):
+            continue
+        if t0v >= 20.0 >= t1v:
+            t0, t1 = t0v, t1v
             d0, d1 = depths[i], depths[i + 1]
             if t0 == t1:
                 return round(d0, 1)
@@ -563,9 +586,9 @@ def fetch_olr(now: datetime) -> tuple[dict, dict]:
                 return {}, {"source": "synthetic", "error": "empty OLR time axis"}
             t0 = max(0, ntime - OLR_DAYS)
             la = np.where(np.abs(lat_all) <= OLR_LAT_LIM)[0]
-            data = np.asarray(ds.variables["olr"][t0:ntime, la[0]:la[-1] + 1, :])
-            # mean over the window -> one anomaly map
-            data = data.mean(axis=0)
+            data = np.ma.filled(ds.variables["olr"][t0:ntime, la[0]:la[-1] + 1, :], np.nan)
+            # mean over the window -> one anomaly map (NaN-safe)
+            data = np.nanmean(data, axis=0)
             # last timestamp label
             units = ds.variables["time"].units
             t_last = float(time_all[-1])
@@ -822,10 +845,7 @@ def write_outputs(out_dir: Path, payload: dict, meta: dict, max_history: int):
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     hist_path = hist_dir / f"{today}.json"
-    if hist_path.exists():
-        hist_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
-    else:
-        hist_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    hist_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
 
     # prune old history
     old = sorted(hist_dir.glob("*.json"))
@@ -1040,7 +1060,7 @@ def main() -> int:
              meta["summary"]["live"], meta["summary"]["endpoints_total"],
              meta["summary"]["derived"], meta["summary"]["synthetic"],
              meta["summary"]["error"])
-    log.info("Pipeline finished in %.1fs", meta["duration_sec"] if False else time.time() - started)
+    log.info("Pipeline finished in %.1fs", time.time() - started)
     return 0 if meta["summary"]["error"] == 0 else 1
 
 

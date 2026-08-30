@@ -1,74 +1,73 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-08-30T13:10:13Z",
+ "generated_at": "2026-08-30T13:21:52Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 907,
+   "latency_ms": 1038,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 811,
+   "latency_ms": 950,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 439,
+   "latency_ms": 462,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 431,
+   "latency_ms": 424,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 441,
+   "latency_ms": 444,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 440,
+   "latency_ms": 485,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "godas": {
-   "source": "derived",
-   "latency_ms": 52093,
-   "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc",
-   "note": "climatology reference missing; anomalies are raw offsets"
+   "source": "live",
+   "latency_ms": 53241,
+   "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
   },
   "olr": {
    "source": "live",
-   "latency_ms": 3954,
+   "latency_ms": 4115,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
   },
   "plume": {
    "source": "synthetic",
-   "latency_ms": 9,
+   "latency_ms": 7,
    "url": "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/",
    "note": "IRI data library requires login; official plume figure linked instead"
   },
   "wind850": {
    "source": "synthetic",
-   "latency_ms": 8,
+   "latency_ms": 4,
    "note": "NCEP/NCAR reanalysis via IRI requires login; schematic field"
   },
   "precip": {
    "source": "synthetic",
-   "latency_ms": 4,
+   "latency_ms": 3,
    "note": "NMME via IRI requires login; climatological schematic"
   }
  },
  "summary": {
   "endpoints_total": 11,
-  "live": 7,
-  "derived": 1,
+  "live": 8,
+  "derived": 0,
   "synthetic": 3,
   "error": 0
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1600244
+  "data.json_size_bytes": 1463487
  }
 }

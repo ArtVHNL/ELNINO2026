@@ -43,6 +43,15 @@ provenance via the top-level `sources` map and the `_pipeline.status` matrix.
 }
 ```
 
+## Missing cells
+
+GODAS uses fill values for land and below-bottom cells. The pipeline converts
+them to NaN internally and:
+
+- `absolute`: forward-filled along longitude (nearest ocean value),
+- `anomaly`: neutralized to `0.0` (no anomaly where there is no ocean),
+- `thermocline_depth`: `null` where the 20 °C isotherm cannot be determined.
+
 ## Provenance semantics
 
 - `live` — parsed from the official source in this run.

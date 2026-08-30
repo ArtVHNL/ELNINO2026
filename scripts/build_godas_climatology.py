@@ -45,7 +45,9 @@ def read_slice(url: str, idx: tuple) -> np.ndarray | None:
     for attempt in range(3):
         try:
             with netCDF4.Dataset(url) as ds:
-                return np.asarray(ds.variables["pottmp"][idx], dtype=np.float64)
+                data = ds.variables["pottmp"][idx]
+                # GODAS uses _FillValue for land / below-bottom cells: keep them as NaN
+                return np.ma.filled(data, np.nan).astype(np.float64)
         except Exception as e:  # noqa: BLE001
             log.warning("  attempt %d failed for %s: %s", attempt + 1, url[-40:], e)
             time.sleep(3 * (attempt + 1))
@@ -94,18 +96,20 @@ def main() -> int:
         wwv_c = wwv - 273.15
         ntime = min(hm.shape[0], 12)
         for t in range(ntime):
-            hm_sum[t] += hm_c[t].mean(axis=1)   # lat-average
-            wwv_sum[t] += wwv_c[t].mean(axis=(1, 2))
-            hm_cnt[t] += 1
-            wwv_cnt[t] += 1
+            hm_lat = np.nanmean(hm_c[t], axis=1)          # lat-average (2°S–2°N)
+            hm_sum[t] += np.nan_to_num(hm_lat)            # missing cells -> 0 in the sum
+            hm_cnt[t] += np.isfinite(hm_lat).astype(np.float64)
+            wwv_mean = np.nanmean(wwv_c[t], axis=(1, 2))  # box mean per depth
+            wwv_sum[t] += np.nan_to_num(wwv_mean)
+            wwv_cnt[t] += np.isfinite(wwv_mean).astype(np.float64)
         log.info("  %d done in %.1fs (months=%d)", year, time.time() - t0, ntime)
 
     ok_months = [i for i in range(12) if hm_cnt[i] >= 20]
     if len(ok_months) < 12:
         log.warning("Only %d months have sufficient coverage: %s", len(ok_months), ok_months)
 
-    hm_clim = [hm_sum[m] / hm_cnt[m] for m in range(12)]
-    wwv_clim = [wwv_sum[m] / wwv_cnt[m] for m in range(12)]
+    hm_clim = [np.divide(hm_sum[m], hm_cnt[m], out=np.zeros_like(hm_sum[m]), where=hm_cnt[m] > 0) for m in range(12)]
+    wwv_clim = [np.divide(wwv_sum[m], wwv_cnt[m], out=np.zeros_like(wwv_sum[m]), where=wwv_cnt[m] > 0) for m in range(12)]
 
     payload = {
         "hm": [[[round(float(v), 3) for v in row] for row in hm_clim[m]] for m in range(12)],

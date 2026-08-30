@@ -185,6 +185,22 @@ def test_event_comparison():
     assert result[1]["label"].endswith("(developing)")
 
 
+def test_fill_lon():
+    import numpy as np
+    field = np.array([[np.nan, np.nan, 25.0, np.nan, 27.0, np.nan],
+                      [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]])
+    out = fd._fill_lon(field)
+    assert out[0].tolist() == [25.0, 25.0, 25.0, 25.0, 27.0, 27.0]
+    assert out[1].tolist() == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+def test_isotherm_depth_nan():
+    depths = [5.0, 15.0, 25.0, 35.0]
+    assert fd._isotherm_depth(depths, [26.0, float("nan"), 18.0, 12.0]) is None
+    d = fd._isotherm_depth(depths, [26.0, 22.0, 18.0, float("nan")])
+    assert d is not None and 19.0 < d < 21.0
+
+
 def test_isotherm_depth():
     depths = [5.0, 15.0, 25.0, 35.0]
     profile = [26.0, 22.0, 18.0, 12.0]  # crosses 20°C between 15 and 25 m

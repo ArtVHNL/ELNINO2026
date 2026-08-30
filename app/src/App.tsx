@@ -1148,8 +1148,15 @@ export default function App() {
             </div>
           </div>
           <div className="text-right space-y-1 shrink-0">
-            <p className="text-[10px] text-gray-600">© 2026 MOADI · NOAA/CPC/IRI/BoM/PMEL</p>
-            <p className="text-[10px] text-gray-600">React · D3.js · Tailwind · Motion</p>
+            <p className="text-[10px] text-gray-500 font-bold uppercase">Machine-readable</p>
+            <div className="flex justify-end gap-3">
+              <a href="data.json" className="hover:text-blue-400 transition-colors">data.json</a>
+              <a href="meta.json" className="hover:text-blue-400 transition-colors">meta.json</a>
+              <a href="news/latest.json" className="hover:text-blue-400 transition-colors">briefing</a>
+            </div>
+            <p className="text-[10px] text-gray-600">© 2026 · Data: NOAA CPC · NOAA PSL · IRI</p>
+            <p className="text-[10px] text-gray-600">React · D3.js · Tailwind · Motion · Deck.gl</p>
+            <p className="text-[10px] text-gray-600">AI briefings are machine-generated and not meteorologist-reviewed</p>
           </div>
         </footer>
 
