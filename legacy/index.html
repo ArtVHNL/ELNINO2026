@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="El Niño 2026 Dashboard - Real-time tracking and predictions for the upcoming El Niño event.">
+  <title>El Niño 2026 Premium Dashboard</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Libraries -->
+  <script src="https://d3js.org/d3.v7.min.js" defer></script>
+  <script src="https://unpkg.com/topojson@3" defer></script>
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Application -->
+  <script type="module" src="js/app.js?v=4"></script>
+</head>
+<body>
+  <div class="mesh-background"></div>
+  
+  <main class="container">
+    <!-- HEADER -->
+    <header aria-label="Dashboard Header">
+      <div class="header-left">
+        <h1>El Niño 2026 Global Dashboard</h1>
+        <p class="subtitle">Real-time ocean & atmosphere anomaly tracking | Update: <time datetime="2026-06-05">5 June 2026</time></p>
+      </div>
+      <div class="header-right">
+        <span class="badge" role="status" aria-live="polite">⚠ SUPER EL NIÑO WATCH</span>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="nav-tabs" aria-label="Dashboard sections">
+      <button class="nav-tab active" data-target="tab-overview">Overview</button>
+      <button class="nav-tab" data-target="tab-ocean">Ocean Dynamics</button>
+      <button class="nav-tab" data-target="tab-atmosphere">Atmosphere</button>
+      <button class="nav-tab" data-target="tab-forecast">Forecast & Impact</button>
+      <button class="nav-tab" data-target="tab-info">Info & Sources</button>
+    </nav>
+
+    <!-- TAB 1: OVERVIEW -->
+    <div id="tab-overview" class="tab-content active">
+      <section class="hero-grid" aria-label="Key Performance Indicators">
+        <article class="card kpi-card stagger-1" id="kpi-nino">
+          <header class="card-header" style="justify-content:center;">
+            <h2 class="card-title">Niño 3.4 SSTA</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">De Sea Surface Temperature Anomaly in de Niño 3.4 regio. Dit is de belangrijkste indicator voor El Niño. Waardes boven +0.5°C betekenen El Niño.</div>
+            </span>
+          </header>
+          <div class="kpi-value" style="color:var(--accent-red)">+2.31</div>
+          <div class="kpi-label">°C &middot; May 2026</div>
+          <div class="kpi-trend" style="color:var(--accent-red)">↑ +0.32°C vs Apr</div>
+          <div class="kpi-sparkline" id="spark-nino" aria-hidden="true"></div>
+        </article>
+        
+        <article class="card kpi-card stagger-2" id="kpi-oni">
+          <header class="card-header" style="justify-content:center;">
+            <h2 class="card-title">ONI (MAM 2026)</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">Oceanic Niño Index (ONI) is een voortschrijdend 3-maandelijks gemiddelde. Dit is de officiële NOAA maatstaf voor ENSO gebeurtenissen.</div>
+            </span>
+          </header>
+          <div class="kpi-value" style="color:var(--accent-red)">+2.12</div>
+          <div class="kpi-label">°C &middot; 3-month average</div>
+          <div class="kpi-trend" style="color:var(--accent-red)">Very Strong Event &gt;+2.0 ✓</div>
+          <div class="progress-bar-container" aria-hidden="true">
+            <div class="progress-bar-marker"></div>
+            <div class="progress-bar-fill"></div>
+          </div>
+        </article>
+        
+        <article class="card kpi-card stagger-3" id="kpi-soi">
+          <header class="card-header" style="justify-content:center;">
+            <h2 class="card-title">SOI (30-day avg)</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">Southern Oscillation Index meet de luchtdrukverschillen tussen Tahiti en Darwin. Sterk negatieve waardes (onder -7) duiden op El Niño.</div>
+            </span>
+          </header>
+          <div class="kpi-value" style="color:var(--accent-cyan)">-18.7</div>
+          <div class="kpi-label">Index points &middot; May 2026</div>
+          <div class="kpi-trend" style="color:var(--accent-cyan)">↓ Strongly negative</div>
+          <div class="kpi-sparkline" id="spark-soi" aria-hidden="true"></div>
+        </article>
+      </section>
+
+      <!-- Global OLR / SST Map in Overview -->
+      <section class="section-full" aria-label="Global View">
+        <article class="card stagger-4">
+          <header class="card-header">
+            <h2 class="card-title">Interactive Globe: Outgoing Longwave Radiation Anomaly</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">Sleep met je muis om de aarde te draaien! Dit model laat de bewolkingsafwijking zien (OLR). Blauw = meer onweer/regen (typisch over de Stille Oceaan bij El Niño), Rood = droger.</div>
+            </span>
+          </header>
+          <div class="chart-container chart-container-map draggable" id="chart-olr-wind"></div>
+        </article>
+      </section>
+    </div>
+
+    <!-- TAB 2: OCEAN DYNAMICS -->
+    <div id="tab-ocean" class="tab-content">
+      <section class="section-grid-2" aria-label="Ocean Analysis">
+        <article class="card stagger-1">
+          <header class="card-header">
+            <h2 class="card-title">Niño 3.4 SSTA Timeline</h2>
+          </header>
+          <div class="chart-container" id="chart-nino34-ts"></div>
+        </article>
+        <article class="card stagger-2">
+          <header class="card-header">
+            <h2 class="card-title">Subsurface Temperature Anomaly — Hovmöller (May 2026)</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">Een dwarsdoorsnede van de Stille Oceaan (Longitude = oost/west, Depth = diepte). Rode kleuren tonen gigantische warmtebellen onder water die naar het oppervlak drijven.</div>
+            </span>
+          </header>
+          <div class="chart-container" id="chart-hovmoller"></div>
+        </article>
+      </section>
+    </div>
+
+    <!-- TAB 3: ATMOSPHERE -->
+    <div id="tab-atmosphere" class="tab-content">
+      <section class="section-grid-2" aria-label="Atmosphere Analysis">
+        <article class="card stagger-1">
+          <header class="card-header">
+            <h2 class="card-title">Southern Oscillation Index (SOI) — Last 12 Months</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">Staven onder de lijn (-7) laten de aanhoudende zwakte zien in de passaatwinden, de "motor" van El Niño in de atmosfeer.</div>
+            </span>
+          </header>
+          <div class="chart-container chart-container-sm" id="chart-soi-bars"></div>
+        </article>
+      </section>
+    </div>
+
+    <!-- TAB 4: FORECAST & IMPACT -->
+    <div id="tab-forecast" class="tab-content">
+      <section class="section-grid-2" aria-label="Model Forecasts">
+        <article class="card stagger-1">
+          <header class="card-header">
+            <h2 class="card-title">ENSO Ensemble Plume — Model Predictions</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">De "Spaghetti-grafiek". Hier bundelen we de voorspellingen van klimaatmodellen over de hele wereld. De witte lijn is de consensus.</div>
+            </span>
+          </header>
+          <div class="chart-container" id="chart-plume"></div>
+        </article>
+        <article class="card stagger-2">
+          <header class="card-header">
+            <h2 class="card-title">Probability Forecast & Model Peaks</h2>
+          </header>
+          <div class="prob-bar" role="progressbar" aria-label="ENSO Probability Forecast">
+            <div class="prob-segment prob-el" style="width:92%">El Niño 92%</div>
+            <div class="prob-segment prob-neu" style="width:7%">N 7%</div>
+            <div class="prob-segment prob-la" style="width:1%">L 1%</div>
+          </div>
+          <div style="margin-top:24px; overflow-x:auto;">
+            <table class="historical-table" aria-label="Model Peak Predictions">
+              <thead>
+                <tr>
+                  <th scope="col">Model</th>
+                  <th scope="col">Peak Month</th>
+                  <th scope="col">Peak (°C)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>CFSv2</td><td>NDJ 2026</td><td>+2.71</td></tr>
+                <tr><td>ECMWF SEAS5</td><td>NDJ 2026</td><td>+2.65</td></tr>
+                <tr><td>UKMO GloSea6</td><td>NDJ 2026</td><td>+2.58</td></tr>
+                <tr><td>NMME Consensus</td><td>NDJ 2026</td><td>+2.67</td></tr>
+                <tr><td>Statistical</td><td>DJF 2027</td><td>+2.45</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="section-full" aria-label="Impact Forecast">
+        <article class="card stagger-3">
+          <header class="card-header">
+            <h2 class="card-title">Interactive Globe: Precipitation Anomaly Forecast — JJA 2026</h2>
+            <span class="info-icon">ⓘ
+              <div class="context-tooltip">De verwachte regenval. El Niño verstoort het weer wereldwijd: droogte (bruin) en overstromingen (groen). Roteer de planeet om je regio te zoeken.</div>
+            </span>
+          </header>
+          <div class="chart-container chart-container-map draggable" id="chart-precip"></div>
+        </article>
+      </section>
+    </div>
+
+    <!-- TAB 5: INFO & SOURCES -->
+    <div id="tab-info" class="tab-content">
+      <section class="section-grid-2" aria-label="Information and Sources">
+        <article class="card stagger-1">
+          <header class="card-header">
+            <h2 class="card-title">Metadata & Data Sources</h2>
+          </header>
+          <div style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6;">
+            <p style="margin-bottom: 12px;"><strong>Data Sources:</strong> Dit dashboard maakt gebruik van diverse openbare API's en meteorologische datasets om actuele weersanomalieën en voorspellingen te tonen:</p>
+            <ul style="margin-left: 20px; margin-bottom: 16px;">
+              <li><strong>NOAA CPC</strong> (Climate Prediction Center) - SSTA en ONI data.</li>
+              <li><strong>IRI</strong> (International Research Institute) - ENSO voorspellingsmodellen (Plume).</li>
+              <li><strong>BoM</strong> (Bureau of Meteorology) - Southern Oscillation Index (SOI) metingen.</li>
+              <li><strong>PMEL/TAO</strong> - Subsurface oceaantemperaturen via buoys.</li>
+              <li><strong>NMME</strong> (North American Multi-Model Ensemble) - Neerslag- en stralingsanomalieën.</li>
+            </ul>
+            <p><time datetime="2026-06-05">Laatste data-sync: 5 June 2026</time></p>
+          </div>
+        </article>
+
+        <article class="card stagger-2">
+          <header class="card-header">
+            <h2 class="card-title">Historical Super El Niño Comparison</h2>
+          </header>
+          <div style="overflow-x:auto;">
+            <table class="historical-table" aria-label="Historical Comparisons">
+              <thead>
+                <tr>
+                  <th scope="col">Event</th>
+                  <th scope="col">Peak ONI</th>
+                  <th scope="col">Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>1982–83</td><td>+2.2°C</td><td>Very Strong</td></tr>
+                <tr><td>1997–98</td><td>+2.4°C</td><td>Very Strong</td></tr>
+                <tr><td>2015–16</td><td>+2.6°C</td><td>Very Strong</td></tr>
+                <tr class="highlight-row"><td>2026 (proj.)</td><td>+2.7°C</td><td>Super El Niño</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </div>
+
+  </main>
+
+  <div class="tooltip-d3" id="tooltip" style="opacity:0;" aria-hidden="true" role="tooltip"></div>
+
+</body>
+</html>
