@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { BarChart2 } from "lucide-react";
-import { HISTORIC_ANALOGS } from "../data";
+import { BarChart2, Radar } from "lucide-react";
+import { ComparisonEvent, HISTORIC_ANALOGS } from "../data";
 
-export function HistoricAnalogsSection() {
+interface Props {
+  comparisonEvents?: ComparisonEvent[];
+}
+
+export function HistoricAnalogsSection({ comparisonEvents }: Props) {
   const [activeIdx, setActiveIdx] = useState(0);
   const current = HISTORIC_ANALOGS[activeIdx];
 
@@ -19,6 +23,26 @@ export function HistoricAnalogsSection() {
           Reference Center
         </span>
       </div>
+
+      {comparisonEvents && comparisonEvents.length > 0 && (
+        <div className="bg-slate-900/40 rounded-xl p-3 border border-white/5">
+          <div className="flex items-center gap-1.5 text-[9px] font-mono text-emerald-400 font-bold uppercase mb-2">
+            <Radar className="w-3 h-3" /> Events detected from live ONI history
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {[...comparisonEvents].reverse().slice(0, 4).map((ev, i) => (
+              <div key={i} className={`rounded-lg px-3 py-2 border text-[10px] font-mono ${
+                ev.active
+                  ? "bg-red-950/30 border-red-900/40 text-red-300"
+                  : "bg-slate-950/40 border-white/5 text-gray-400"
+              }`}>
+                <div className="font-bold">{ev.label}</div>
+                <div className="text-[9px]">{ev.category} · peak {ev.peak >= 0 ? "+" : ""}{ev.peak.toFixed(2)}°C ({ev.peak_season})</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {HISTORIC_ANALOGS.map((item, idx) => (

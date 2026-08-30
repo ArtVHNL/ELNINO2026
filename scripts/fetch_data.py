@@ -1,431 +1,636 @@
 #!/usr/bin/env python3
 """
-fetch_data.py — El Niño 2026 Data Pipeline
-Pangeo-stack data pipeline: fetches ENSO data from NOAA/CPC/BoM/PMEL/IRI endpoints.
+fetch_data.py — El Niño 2026 Pipeline v3
+=========================================
+Fetches ENSO monitoring data from verified public NOAA/PSL/CPC/IRI endpoints,
+computes derived diagnostics (WWV, thermocline depth, event comparison),
+and writes a fully provenance-labelled data.json for the public dashboard.
 
-Outputs structured data.json per the schema in PROJECT_CONTEXT.md.
-Graceful fallback: each endpoint wrapped in try/except; synthetic data on failure.
-xarray/OPeNDAP used for IRI netCDF endpoints when available.
+Provenance model (per data block):
+  live      — fetched and parsed successfully from the official source
+  derived   — computed by this pipeline from live data (e.g. WWV from GODAS)
+  synthetic — official source unavailable; deterministic stand-in, clearly
+              labelled in the UI. NEVER presented as measurement.
+  stale     — fetched OK but older than the freshness threshold
+
+Outputs (in OUT_DIR):
+  data.json          dashboard payload (schema v3)
+  meta.json          endpoint health matrix + freshness report
+  history/YYYY-MM-DD.json   daily archive of data.json
+  pipeline.log       run log
+
+Usage:
+  python scripts/fetch_data.py [--out DIR] [--max-history N]
 """
 
-import json, os, sys, logging, csv, io
+import argparse
+import json
+import logging
+import os
+import re
+import sys
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import requests
 import numpy as np
 
-# Optional: Pangeo xarray for OPeNDAP
 try:
-    import xarray as xr
-    HAS_XARRAY = True
+    import netCDF4
+    HAS_NETCDF4 = True
 except ImportError:
-    HAS_XARRAY = False
+    HAS_NETCDF4 = False
 
-# Optional: pandas for CSV parsing
-try:
-    import pandas as pd
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
+VERSION = "3.0.0"
+USER_AGENT = "enso-pipeline/3.0 (+https://github.com/ArtVHNL/ELNINO2026)"
+REQUEST_TIMEOUT = 30
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler()]
-)
-log = logging.getLogger(__name__)
+# --------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------
+log = logging.getLogger("enso-pipeline")
+log.setLevel(logging.INFO)
+_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
-OUTPUT_DIR = Path(os.environ.get('OUTPUT_DIR', '.'))
-OUTPUT_FILE = OUTPUT_DIR / 'data.json'
-LOG_FILE = OUTPUT_DIR / 'pipeline.log'
 
-fh = logging.FileHandler(LOG_FILE)
-fh.setLevel(logging.INFO)
-fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-log.addHandler(fh)
+def _setup_logging(log_file: Path):
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(_fmt)
+    log.addHandler(sh)
+    if log_file:
+        fh = logging.FileHandler(log_file)
+        fh.setFormatter(_fmt)
+        log.addHandler(fh)
 
-# ============================================================
-# Graceful fetch helpers
-# ============================================================
-def safe_fetch(url, timeout=30):
-    """HTTP GET with timeout + error handling. Returns None on failure."""
-    try:
-        log.info(f"  Fetching: {url[:120]}...")
-        resp = requests.get(url, timeout=timeout, headers={'User-Agent': 'enso-pipeline/1.0'})
-        resp.raise_for_status()
-        return resp.text
-    except requests.exceptions.Timeout:
-        log.warning(f"    TIMEOUT: {url[:80]}")
-        return None
-    except requests.exceptions.RequestException as e:
-        log.warning(f"    HTTP ERROR: {e}")
-        return None
-    except Exception as e:
-        log.warning(f"    UNEXPECTED: {e}")
-        return None
 
-def safe_fetch_json(url, timeout=30):
-    """Fetch + parse JSON."""
-    text = safe_fetch(url, timeout)
-    if text:
+# --------------------------------------------------------------------------
+# HTTP helpers with retry/backoff
+# --------------------------------------------------------------------------
+def fetch_text(url: str, timeout: int = REQUEST_TIMEOUT, retries: int = 3) -> str | None:
+    """GET text with exponential backoff. Returns None on final failure."""
+    delay = 2.0
+    for attempt in range(1, retries + 1):
         try:
-            return json.loads(text)
-        except json.JSONDecodeError as e:
-            log.warning(f"    JSON PARSE ERROR: {e}")
+            resp = requests.get(
+                url, timeout=timeout,
+                headers={"User-Agent": USER_AGENT, "Accept": "*/*"},
+            )
+            resp.raise_for_status()
+            return resp.text
+        except requests.exceptions.RequestException as e:
+            log.warning("  HTTP attempt %d/%d failed for %s: %s", attempt, retries, url[:100], e)
+            if attempt < retries:
+                time.sleep(delay)
+                delay *= 2
     return None
 
-def safe_fetch_xarray(url, **kwargs):
-    """Fetch via xarray OPeNDAP. Returns xarray Dataset or None."""
-    if not HAS_XARRAY:
-        log.info("    xarray not installed, skipping OPeNDAP")
+
+def fetch_binary(url: str, timeout: int = 60, retries: int = 2) -> bytes | None:
+    delay = 2.0
+    for attempt in range(1, retries + 1):
+        try:
+            resp = requests.get(url, timeout=timeout, headers={"User-Agent": USER_AGENT})
+            resp.raise_for_status()
+            return resp.content
+        except requests.exceptions.RequestException as e:
+            log.warning("  BIN attempt %d/%d failed for %s: %s", attempt, retries, url[:100], e)
+            if attempt < retries:
+                time.sleep(delay)
+    return None
+
+
+def parse_float_list(text: str) -> list[float]:
+    """Parse whitespace-separated floats, tolerating '-.5' style tokens."""
+    return [float(tok) for tok in text.split() if tok.strip()]
+
+
+# --------------------------------------------------------------------------
+# 1. CPC sstoi.indices — monthly SST + anomaly for Niño 1+2 / 3 / 4 / 3.4
+# --------------------------------------------------------------------------
+CPC_SSTOI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
+
+
+def fetch_cpc_sstoi() -> tuple[dict, dict]:
+    """Full monthly history (1982–present) for the four Niño regions."""
+    text = fetch_text(CPC_SSTOI_URL)
+    if not text:
+        return {}, {"source": "synthetic", "error": "fetch failed"}
+
+    regions = {"nino12": 3, "nino3": 5, "nino4": 7, "nino34": 9}  # ANOM column index
+    series = {k: [] for k in regions}
+    for line in text.strip().splitlines():
+        parts = line.split()
+        if len(parts) < 10 or not parts[0].isdigit():
+            continue
+        year, month = int(parts[0]), int(parts[1])
+        if not (1 <= month <= 12):
+            continue
+        date = f"{year}-{month:02d}-01"
+        for name, col in regions.items():
+            try:
+                val = float(parts[col])
+                if -10 < val < 10:
+                    series[name].append({"date": date, "value": round(val, 2)})
+            except (ValueError, IndexError):
+                continue
+
+    if len(series["nino34"]) < 24:
+        return {}, {"source": "synthetic", "error": f"only {len(series['nino34'])} rows parsed"}
+    log.info("  OK: nino34 %d rows (latest %s)", len(series["nino34"]), series["nino34"][-1]["date"])
+    return series, {"source": "live", "url": CPC_SSTOI_URL}
+
+
+# --------------------------------------------------------------------------
+# 2. CPC wksst9120.for — weekly Niño region SST anomalies (fixed width)
+# --------------------------------------------------------------------------
+CPC_WKST_URL = "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
+
+
+def fetch_cpc_weekly() -> tuple[dict, dict]:
+    """Weekly values for the four Niño regions (fixed-width columns)."""
+    text = fetch_text(CPC_WKST_URL)
+    if not text:
+        return {}, {"source": "synthetic", "error": "fetch failed"}
+
+    # Layout: 9-char week label, then per region: SST(4) SSTA(4)
+    regions = ["nino12", "nino3", "nino34", "nino4"]
+    series = {k: [] for k in regions}
+    for line in text.splitlines():
+        tokens = line.split()
+        # layout: Week SST1 SSTA1 SST2 SSTA2 ...  (9 tokens per data row)
+        if len(tokens) != 9 or not tokens[0][:1].isdigit():
+            continue
+        week = tokens[0]
+        try:
+            # 02SEP1981 → 1981-09-02 (week centered date)
+            day = datetime.strptime(week, "%d%b%Y").date().isoformat()
+        except ValueError:
+            continue
+        for i, name in enumerate(regions):
+            try:
+                val = float(tokens[2 + 2 * i])
+                if -10 < val < 10:
+                    series[name].append({"date": day, "value": round(val, 2)})
+            except ValueError:
+                continue
+    if not series["nino34"]:
+        return {}, {"source": "synthetic", "error": "no rows parsed"}
+    log.info("  OK: weekly nino34 %d rows (latest %s)", len(series["nino34"]), series["nino34"][-1]["date"])
+    return series, {"source": "live", "url": CPC_WKST_URL}
+
+
+# --------------------------------------------------------------------------
+# 3. CPC ONI — 3-month running mean, full history
+# --------------------------------------------------------------------------
+CPC_ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
+SEASONS = ["DJF", "JFM", "FMA", "MAM", "AMJ", "MJJ", "JJA", "JAS", "ASO", "SON", "OND", "NDJ"]
+
+
+def fetch_cpc_oni() -> tuple[list, dict]:
+    text = fetch_text(CPC_ONI_URL)
+    if not text:
+        return [], {"source": "synthetic", "error": "fetch failed"}
+    records = []
+    for line in text.strip().splitlines():
+        parts = line.split()
+        # current CPC format: SEAS YR TOTAL ANOM
+        if len(parts) < 4 or parts[0] not in SEASONS or not parts[1].isdigit():
+            continue
+        season, year = parts[0], int(parts[1])
+        try:
+            val = float(parts[3])
+        except ValueError:
+            continue
+        if -5 < val < 5:
+            records.append({"season": season, "year": year, "value": round(val, 2)})
+    if len(records) < 24:
+        return [], {"source": "synthetic", "error": f"only {len(records)} rows"}
+    log.info("  OK: ONI %d rows (latest %s %d)", len(records), records[-1]["season"], records[-1]["year"])
+    return records, {"source": "live", "url": CPC_ONI_URL}
+
+
+# --------------------------------------------------------------------------
+# 4. CPC SOI — monthly, full history
+# --------------------------------------------------------------------------
+CPC_SOI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/soi"
+
+
+def fetch_cpc_soi() -> tuple[list, dict]:
+    text = fetch_text(CPC_SOI_URL)
+    if not text:
+        return [], {"source": "synthetic", "error": "fetch failed"}
+    records = []
+    for line in text.strip().splitlines():
+        parts = line.split()
+        if len(parts) < 2 or not parts[0].isdigit():
+            continue
+        year = int(parts[0])
+        for i, val_str in enumerate(parts[1:13], 1):
+            try:
+                val = float(val_str)
+            except ValueError:
+                continue
+            if -60 < val < 60:
+                records.append({"date": f"{year}-{i:02d}-15", "value": round(val, 2)})
+    if len(records) < 24:
+        return [], {"source": "synthetic", "error": f"only {len(records)} rows"}
+    log.info("  OK: SOI %d rows (latest %s)", len(records), records[-1]["date"])
+    return records, {"source": "live", "url": CPC_SOI_URL}
+
+
+# --------------------------------------------------------------------------
+# 5. PSL MEI v2 — monthly, full history
+# --------------------------------------------------------------------------
+PSL_MEI_URL = "https://psl.noaa.gov/enso/mei/data/meiv2.data"  # MEI v2 (1979–present)
+
+
+def fetch_psl_mei() -> tuple[list, dict]:
+    text = fetch_text(PSL_MEI_URL)
+    if not text:
+        return [], {"source": "synthetic", "error": "fetch failed"}
+    records = []
+    for line in text.strip().splitlines():
+        parts = line.split()
+        # header/footer lines ("1979 2026", "Multivariate ENSO Index ...") are skipped
+        if len(parts) < 2 or not parts[0].isdigit() or parts[1].isdigit():
+            continue
+        year = int(parts[0])
+        for i, val_str in enumerate(parts[1:13], 1):
+            try:
+                val = float(val_str)
+            except ValueError:
+                continue
+            if -10 < val < 10:
+                records.append({"date": f"{year}-{i:02d}-01", "value": round(val, 2)})
+    if len(records) < 24:
+        return [], {"source": "synthetic", "error": f"only {len(records)} rows"}
+    log.info("  OK: MEI %d rows (latest %s)", len(records), records[-1]["date"])
+    return records, {"source": "live", "url": PSL_MEI_URL}
+
+
+# --------------------------------------------------------------------------
+# 6. CPC ENSO Diagnostic Discussion — status, indices, probabilities
+# --------------------------------------------------------------------------
+CPC_ENSO_DISC_URL = (
+    "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
+)
+MONTHS_EN = {
+    "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
+    "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12,
+}
+
+
+def _text_of(html: str) -> str:
+    html = re.sub(r"<script.*?</script>", "", html, flags=re.S | re.I)
+    html = re.sub(r"<[^>]+>", " ", html)
+    import html as h
+    text = h.unescape(html)
+    text = text.replace("\xa0", " ")
+    return re.sub(r"\s+", " ", text)
+
+
+def fetch_cpc_ensodisc() -> tuple[dict, dict]:
+    html = fetch_text(CPC_ENSO_DISC_URL)
+    if not html:
+        return {}, {"source": "synthetic", "error": "fetch failed"}
+    text = _text_of(html)
+
+    def grab(pattern: str) -> str | None:
+        m = re.search(pattern, text, flags=re.I)
+        return m.group(1).strip() if m else None
+
+    status = grab(r"ENSO Alert System Status:\s*([A-Za-z\u00f1 ]+?)\s+(?=Synopsis:)")
+    issued = grab(r"issued by CLIMATE PREDICTION CENTER/NCEP/NWS\s+(\d{1,2}\s+\w+\s+\d{4})")
+    next_disc = grab(r"next ENSO Diagnostics Discussion is scheduled for\s+([^.]{5,60})")
+    synopsis = grab(r"Synopsis:\s*(.*?)(?=\s*(?:Oceanic and atmospheric|The next ENSO Diagnostics|El Ni\u00f1o/La Ni\u00f1a Current))") or \
+        grab(r"Synopsis:\s*([A-Za-z0-9\u00c0-\u024f.,'%()+\-–°\s]{60,700}?)")
+
+    # Niño index values: "The July Niño index values were +1.4°C in Niño-3.4, ..."
+    idx = {}
+    m = re.search(
+        r"The\s+(\w+)\s+Ni\u00f1o index values were\s+(.+?)\s*\[Fig",
+        text, flags=re.I,
+    )
+    if m:
+        month_name, values_text = m.group(1), m.group(2)
+        idx["month"] = month_name
+        # pattern: "+1.4°C in Niño-3.4, +1.7°C in Niño-3, ..." (value precedes region)
+        for vm in re.finditer(r"([+-]?\d+\.?\d*)\s*°?C?\s*in\s*(Ni\u00f1o-3\.4|Ni\u00f1o-3|Ni\u00f1o-1\+2|Ni\u00f1o-4)", values_text):
+            val, region = float(vm.group(1)), vm.group(2)
+            key = {"Ni\u00f1o-3.4": "nino34", "Ni\u00f1o-3": "nino3",
+                   "Ni\u00f1o-1+2": "nino12", "Ni\u00f1o-4": "nino4"}[region]
+            idx[key] = val
+
+    # Probability language: "greater than 90% chance of a very strong event ..."
+    probs = {}
+    pm = re.search(r"(greater than|about|around|approximately)\s+(\d{1,3})%\s+chance\s+of\s+([^.,;]{3,60})", text, flags=re.I)
+    if pm:
+        probs["very_strong_chance"] = f"{pm.group(1)} {pm.group(2)}%"
+        probs["very_strong_event"] = re.sub(r"\s+", " ", pm.group(3)).strip()
+
+    strength = None
+    if status:
+        low = status.lower()
+        if "la ni" in low:
+            strength = "La Niña Advisory"
+        elif "neutral" in low:
+            strength = "ENSO Neutral"
+        elif "el ni" in low:
+            strength = "El Niño Advisory"
+
+    if not status:
+        return {}, {"source": "synthetic", "error": "status line not found"}
+
+    result = {
+        "advisory": status,
+        "strength": strength or status,
+        "issued": issued,
+        "next_discussion": next_disc,
+        "synopsis": synopsis,
+        "indices": idx,
+        "probabilities": probs,
+        "url": CPC_ENSO_DISC_URL,
+    }
+    log.info("  OK: status=%r issued=%s", status, issued)
+    return result, {"source": "live", "url": CPC_ENSO_DISC_URL}
+
+
+# --------------------------------------------------------------------------
+# 7. GODAS subsurface temperature via PSL THREDDS OPeNDAP
+#    -> Hovmöller anomaly grid, 20°C isotherm depth, Warm Water Volume
+# --------------------------------------------------------------------------
+GODAS_BASE = "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.{year}.nc"
+GODAS_CLIM_PATH = "reference/godas_pottmp_clim_1991-2020.json.gz"
+GODAS_LON_W = 120   # 120°E
+GODAS_LON_E = 280   # 280°E (80°W)
+GODAS_DEPTH_MAX = 300.0
+GODAS_LAT_HM = 2.0   # Hovmöller: 2°S–2°N
+GODAS_LAT_WWV = 5.0  # WWV: 5°S–5°N
+GODAS_LON_WWV_A = 180.0  # 180°W
+GODAS_LON_WWV_B = 260.0  # 100°W
+
+
+def _godas_year_files(now: datetime) -> list[int]:
+    """Years needed to cover the last 24 months."""
+    years = {now.year, now.year - 1}
+    if now.month <= 2:
+        years.add(now.year - 2)
+    return sorted(years)
+
+
+def _dap_slice(ds_url: str, var: str, idx: tuple[slice, ...]) -> np.ndarray | None:
+    """Read a remote DAP2 slice with retries. Returns ndarray or None."""
+    for attempt in range(3):
+        try:
+            with netCDF4.Dataset(ds_url) as ds:
+                data = ds.variables[var][idx]
+                return np.asarray(data)
+        except Exception as e:  # noqa: BLE001
+            log.warning("  DAP attempt %d failed for %s: %s", attempt + 1, ds_url[:80], e)
+            time.sleep(2 * (attempt + 1))
+    return None
+
+
+def _godas_levels(ds_url: str) -> list[float] | None:
+    for attempt in range(3):
+        try:
+            with netCDF4.Dataset(ds_url) as ds:
+                return [float(v) for v in ds.variables["level"][:]]
+        except Exception as e:  # noqa: BLE001
+            log.warning("  DAP levels attempt %d failed: %s", attempt + 1, e)
+            time.sleep(2)
+    return None
+
+
+def _load_godas_climatology(out_dir: Path) -> dict | None:
+    p = out_dir / GODAS_CLIM_PATH
+    if not p.exists():
+        p = Path(__file__).resolve().parent.parent / GODAS_CLIM_PATH
+    if not p.exists():
         return None
     try:
-        log.info(f"  OPeNDAP: {url[:120]}...")
-        ds = xr.open_dataset(url, **kwargs)
-        log.info(f"    Loaded: {list(ds.data_vars)}")
-        return ds
-    except Exception as e:
-        log.warning(f"    OPeNDAP ERROR: {e}")
+        import gzip
+        with gzip.open(p, "rt", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:  # noqa: BLE001
+        log.warning("  climatology unreadable: %s", e)
         return None
 
-# ============================================================
-# 1. Niño 3.4 SST (weekly index) — CPC fixed-column ASCII
-# ============================================================
-def fetch_nino34():
-    """Fetch NINO3.4 from CPC sstoi.indices."""
-    url = "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
-    text = safe_fetch(url)
-    if not text:
-        return generate_synthetic_nino34()
 
-    records = []
-    for line in text.strip().split('\n'):
-        line = line.strip()
-        if not line or line.startswith('YEAR') or line.startswith('Year'):
+def fetch_godas(now: datetime, out_dir: Path) -> tuple[dict, dict]:
+    if not HAS_NETCDF4:
+        return {}, {"source": "synthetic", "error": "netCDF4 not installed"}
+
+    clim = _load_godas_climatology(out_dir)
+    hm_anom, hm_abs, thermo, months = [], [], [], []
+    wwv_abs, wwv_anom = [], []
+    lon_arr = depth_arr = lat_hm_arr = None
+    any_live = False
+
+    for year in _godas_year_files(now):
+        url = GODAS_BASE.format(year=year)
+        ds_url = url
+        levels = _godas_levels(ds_url)
+        if levels is None:
             continue
-        parts = line.split()
-        if len(parts) < 13:
-            continue
-        try:
-            year = int(parts[0])
-            for m_idx, val_str in enumerate(parts[3:15], 1):
-                if val_str not in ('-999.9', '-999.99', '***', '-99.99'):
-                    val = float(val_str)
-                    records.append({
-                        'date': f"{year}-{m_idx:02d}-01",
-                        'value': round(val, 2)
-                    })
-        except (ValueError, IndexError):
+        depth_idx = [i for i, d in enumerate(levels) if d <= GODAS_DEPTH_MAX]
+        if not depth_idx:
             continue
 
-    if len(records) < 12:
-        log.warning(f"    Only {len(records)} records, using synthetic")
-        return generate_synthetic_nino34()
-
-    log.info(f"    OK: {len(records)} monthly records, latest: {records[-1]}")
-    return records
-
-def generate_synthetic_nino34():
-    """Realistic NINO3.4 2019–2026."""
-    pattern = [
-        0.1,0.2,0.1,0.0,-0.1,0.0,0.1,0.2,0.1,0.0,-0.1,0.0,
-        -0.2,-0.3,-0.4,-0.5,-0.6,-0.7,-0.8,-0.9,-0.8,-0.7,-0.8,-0.9,
-        -1.0,-1.1,-1.0,-0.9,-0.8,-0.7,-0.6,-0.5,-0.4,-0.5,-0.6,-0.7,
-        -0.6,-0.5,-0.4,-0.3,-0.1,0.0,0.1,0.0,-0.1,0.0,0.1,0.2,
-        0.3,0.5,0.7,0.9,1.1,1.3,1.5,1.7,1.9,2.0,2.1,2.1,
-        2.0,1.9,1.8,1.7,1.6,1.5,1.4,1.3,1.4,1.5,1.6,1.7,
-        1.8,1.9,2.0,2.1,2.1,2.0,1.9,2.0,2.1,2.2,2.3,2.3,
-        2.2,2.3,2.3,2.3,2.3
-    ]
-    records = []
-    idx = 0
-    for y in range(2019, 2027):
-        max_m = 5 if y == 2026 else 12
-        for m in range(1, max_m+1):
-            v = pattern[idx] if idx < len(pattern) else 0
-            records.append({'date': f"{y}-{m:02d}-01", 'value': round(v, 2)})
-            idx += 1
-    log.info(f"    SYNTHETIC: {len(records)} records")
-    return records
-
-# ============================================================
-# 2. ONI (3-month running mean) — CPC
-# ============================================================
-def fetch_oni():
-    """Fetch ONI from CPC."""
-    url = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
-    text = safe_fetch(url)
-    if not text:
-        return generate_synthetic_oni()
-
-    records = []
-    for line in text.strip().split('\n'):
-        line = line.strip()
-        if not line or line.startswith('YEAR') or line.startswith('Year'):
-            continue
-        parts = line.split()
-        if len(parts) < 14:
-            continue
-        try:
-            year = int(parts[0])
-            for m_idx, val_str in enumerate(parts[1:13], 1):
-                if val_str not in ('-999.9', '-999.99', '***', 'NaN'):
-                    val = float(val_str)
-                    if -5 < val < 5:
-                        season = ['DJF','JFM','FMA','MAM','AMJ','MJJ','JJA','JAS','ASO','SON','OND','NDJ'][m_idx-1]
-                        records.append({
-                            'season': season,
-                            'year': year,
-                            'value': round(val, 2)
-                        })
-        except (ValueError, IndexError):
+        # fetch coordinate arrays
+        with netCDF4.Dataset(ds_url) as ds:
+            lat_all = np.asarray(ds.variables["lat"][:])
+            lon_all = np.asarray(ds.variables["lon"][:])
+            time_vals = np.asarray(ds.variables["time"][:])
+            ntime = len(time_vals)
+        if ntime == 0:
             continue
 
-    if len(records) < 12:
-        return generate_synthetic_oni()
-    log.info(f"    OK: {len(records)} records, latest: {records[-1]}")
-    return records
-
-def generate_synthetic_oni():
-    nino = generate_synthetic_nino34()
-    vals = [r['value'] for r in nino]
-    oni = []
-    for i in range(1, len(vals)-1):
-        oni.append(round((vals[i-1] + vals[i] + vals[i+1]) / 3, 2))
-    records = []
-    seasons = ['DJF','JFM','FMA','MAM','AMJ','MJJ','JJA','JAS','ASO','SON','OND','NDJ']
-    for i, v in enumerate(oni):
-        year = 2019 + (i // 12)
-        month = (i % 12)
-        if year > 2026 or (year == 2026 and month > 3):
-            break
-        records.append({'season': seasons[month], 'year': year, 'value': v})
-    log.info(f"    SYNTHETIC ONI: {len(records)} records")
-    return records
-
-# ============================================================
-# 3. SOI — CPC monthly
-# ============================================================
-def fetch_soi():
-    """Fetch SOI from CPC."""
-    url = "https://www.cpc.ncep.noaa.gov/data/indices/soi"
-    text = safe_fetch(url)
-    if not text:
-        return generate_synthetic_soi()
-
-    records = []
-    for line in text.strip().split('\n'):
-        line = line.strip()
-        if not line or line.startswith('YEAR') or line.startswith('Year'):
-            continue
-        parts = line.split()
-        if len(parts) < 13:
-            continue
-        try:
-            year = int(parts[0])
-            for m_idx, val_str in enumerate(parts[1:13], 1):
-                if val_str not in ('-999.9', '-999.99', '***', 'NaN'):
-                    val = float(val_str)
-                    if -50 < val < 50:
-                        records.append({
-                            'date': f"{year}-{m_idx:02d}-{15}",
-                            'value': round(val, 2)
-                        })
-        except (ValueError, IndexError):
+        la_hm = np.where(np.abs(lat_all) <= GODAS_LAT_HM)[0]
+        la_wwv = np.where(np.abs(lat_all) <= GODAS_LAT_WWV)[0]
+        lo_hm = np.where((lon_all >= GODAS_LON_W) & (lon_all <= GODAS_LON_E))[0]
+        lo_wwv = np.where((lon_all >= GODAS_LON_WWV_A) & (lon_all <= GODAS_LON_WWV_B))[0]
+        if len(la_hm) == 0 or len(lo_hm) == 0:
             continue
 
-    if len(records) < 12:
-        return generate_synthetic_soi()
-    log.info(f"    OK: {len(records)} records, latest: {records[-1]}")
-    return records
+        d0, d1 = depth_idx[0], depth_idx[-1] + 1
+        lat_hm_arr = [float(v) for v in lat_all[la_hm]]
+        lon_arr = [float(v) for v in lon_all[lo_hm]]
+        depth_arr = [float(levels[i]) for i in depth_idx]
 
-def generate_synthetic_soi():
-    vals = [-8.2, -9.5, -11.3, -13.0, -14.2, -15.1, -16.0, -16.8, -17.5, -18.0, -18.5, -18.7]
-    months = list(range(6, 13)) + list(range(1, 6))
-    years = [2025]*7 + [2026]*5
-    records = []
-    for i in range(12):
-        records.append({'date': f"{years[i]}-{months[i]:02d}-15", 'value': vals[i]})
-    log.info(f"    SYNTHETIC SOI: {len(records)} records")
-    return records
-
-# ============================================================
-# 4. WWV (Warm Water Volume) — PMEL
-# ============================================================
-def fetch_wwv():
-    """Fetch WWV from PMEL."""
-    url = "https://www.pmel.noaa.gov/tao/wwv/data/WWV_5S5N_180W100W.txt"
-    text = safe_fetch(url)
-    if not text:
-        return generate_synthetic_wwv()
-
-    records = []
-    for line in text.strip().split('\n'):
-        line = line.strip()
-        if not line or line.startswith('#') or line.startswith('YEAR') or line.startswith('year'):
+        # Hovmöller box: [time, depth, lat, lon]
+        hm = _dap_slice(ds_url, "pottmp",
+                        (slice(0, ntime), slice(d0, d1), slice(la_hm[0], la_hm[-1] + 1),
+                         slice(lo_hm[0], lo_hm[-1] + 1)))
+        if hm is None:
             continue
-        parts = line.split()
-        if len(parts) < 14:
+        hm_c = hm - 273.15  # Kelvin -> °C
+        hm_latmean = hm_c.mean(axis=2)  # [time, depth, lon]
+
+        # WWV box: [time, depth, lat, lon] -> box mean
+        wwv = _dap_slice(ds_url, "pottmp",
+                         (slice(0, ntime), slice(d0, d1), slice(la_wwv[0], la_wwv[-1] + 1),
+                          slice(lo_wwv[0], lo_wwv[-1] + 1)))
+        if wwv is None:
             continue
-        try:
-            year = int(parts[0])
-            for m_idx, val_str in enumerate(parts[1:13], 1):
-                val = float(val_str)
-                if val < 50:  # sanity
-                    records.append({
-                        'date': f"{year}-{m_idx:02d}-15",
-                        'value': round(val, 2)
-                    })
-        except (ValueError, IndexError):
-            continue
+        wwv_box = wwv.mean(axis=(2, 3))  # [time, depth]
 
-    if len(records) < 12:
-        return generate_synthetic_wwv()
-    log.info(f"    OK: {len(records)} records, latest: {records[-1]}")
-    return records
+        for t in range(ntime):
+            # time in GODAS files: days since 1800-01-01 (approx); derive month label
+            try:
+                tdate = datetime(1800, 1, 1) + timedelta(days=float(time_vals[t]))
+                month_label = tdate.strftime("%Y-%m")
+            except (ValueError, OverflowError):
+                month_label = f"{year}-{t + 1:02d}"
+            months.append(month_label)
+            hm_abs.append([[round(float(v), 2) for v in row] for row in hm_latmean[t]])
+            hm_anom.append(
+                [[round(float(v), 2) for v in row] for row in _anomaly(hm_latmean[t], month_label, clim, "hm")]
+            )
+            # thermocline: 20°C isotherm depth per longitude
+            thermo.append([_isotherm_depth(depth_arr, hm_latmean[t][:, j]) for j in range(len(lon_arr))])
+            wwv_abs.append(round(float(wwv_box[t].mean()), 3))
+            wwv_anom.append(round(float(_anomaly(wwv_box[t], month_label, clim, "wwv").mean()), 3))
+        any_live = True
 
-def generate_synthetic_wwv():
-    """Synthetic WWV reflecting El Niño."""
-    records = []
-    base = 2.0
-    for y in range(2019, 2027):
-        max_m = 5 if y == 2026 else 12
-        for m in range(1, max_m+1):
-            t = (y - 2019 + (m-1)/12) / 7
-            val = base + 2.5 * np.exp(-((t-0.7)**2)/0.08) - 1.0 * np.exp(-((t-0.2)**2)/0.05)
-            val += np.random.normal(0, 0.1)
-            records.append({'date': f"{y}-{m:02d}-15", 'value': round(val, 2)})
-    log.info(f"    SYNTHETIC WWV: {len(records)} records")
-    return records
+    if not any_live:
+        return {}, {"source": "synthetic", "error": "all GODAS DAP reads failed"}
 
-# ============================================================
-# 5. OLR Anomaly — IRI JSON API
-# ============================================================
-def fetch_olr():
-    """Fetch OLR anomaly from IRI Data Library JSON endpoint."""
-    url = ("http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.CPC/"
-           ".GLOBAL/.daily/.olr/.anomaly/T/(last)/RANGE/X/0/360/GRID/"
-           "Y/-90/90/GRID/data.json")
-    data = safe_fetch_json(url)
-    if data and 'X' in data and 'Y' in data:
-        log.info(f"    OK: {len(data.get('X',[]))} lons × {len(data.get('Y',[]))} lats")
-        return {
-            'lon': list(data['X']),
-            'lat': list(data['Y']),
-            'data': list(data['Z']) if 'Z' in data else []
-        }
+    result = {
+        "lon": lon_arr,
+        "depth": depth_arr,
+        "lat": lat_hm_arr,
+        "months": months,
+        "absolute": hm_abs,          # [month][depth][lon] °C
+        "anomaly": hm_anom,          # [month][depth][lon] °C vs 1991-2020 clim
+        "thermocline_depth": thermo, # [month][lon] m (20°C isotherm)
+        "wwv_absolute": wwv_abs,
+        "wwv_anomaly": wwv_anom,
+        "climatology": "1991-2020 GODAS" if clim else None,
+    }
+    source = "live" if clim else "derived"
+    note = None if clim else "climatology reference missing; anomalies are raw offsets"
+    log.info("  OK: %d months, %d lons, %d depths (source=%s)", len(months), len(lon_arr or []), len(depth_arr or []), source)
+    return result, {"source": source, "url": GODAS_BASE.format(year=now.year), "note": note}
 
-    # Fallback via xarray OPeNDAP
-    ds = safe_fetch_xarray(url.replace('data.json', ''))
-    if ds is not None:
-        try:
-            lon = ds['X'].values.tolist()
-            lat = ds['Y'].values.tolist()
-            z = ds['Z'].values.tolist() if 'Z' in ds else []
-            return {'lon': lon, 'lat': lat, 'data': z}
-        except Exception as e:
-            log.warning(f"    xarray extract failed: {e}")
 
-    return generate_synthetic_olr()
+def _anomaly(field: np.ndarray, month_label: str, clim: dict | None, kind: str) -> np.ndarray:
+    """Subtract monthly climatology if available, else return field as-is (caller labels derived)."""
+    if clim is None:
+        return field
+    try:
+        m = int(month_label.split("-")[1]) - 1
+        clim_arr = np.asarray(clim[kind][m], dtype=float)
+        if clim_arr.shape == field.shape:
+            return field - clim_arr
+    except (KeyError, IndexError, ValueError):
+        pass
+    return field
 
-def generate_synthetic_olr():
-    """Synthetic OLR anomaly — enhanced convection central Pacific."""
-    lats = list(range(-30, 31, 5))
-    lons = list(range(120, 291, 5))
-    data = []
-    for la in lats:
-        row = []
-        for lo in lons:
-            x = (lo - 210) / 80.0
-            y = la / 30.0
-            v = -25 * np.exp(-(x*x/0.15 + y*y/0.3)) + 10 * np.exp(-((x+0.5)**2/0.2 + y*y/0.4))
-            row.append(round(v, 1))
-        data.append(row)
-    log.info(f"    SYNTHETIC OLR: {len(lats)}×{len(lons)}")
-    return {'lat': lats, 'lon': lons, 'data': data}
 
-# ============================================================
-# 6. Subsurface Temperature — GODAS via IRI
-# ============================================================
-def fetch_subsurface():
-    """Fetch equatorial subsurface temp anomaly (Hovmoller)."""
-    url = ("http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP/.EMC/.CMB/"
-           ".GODAS/.monthly/.temp/.anomaly/X/120/280/RANGE/Y/-5/5/RANGE/"
-           "Z/0/300/RANGE/data.json")
-    data = safe_fetch_json(url)
-    if data and all(k in data for k in ('X', 'Y', 'Z')):
-        log.info(f"    OK: {len(data['X'])} lons × {len(data['Z'])} depths × {len(data['Y'])} lats")
-        return {
-            'lon': list(data['X']),
-            'depth': list(data['Z']),
-            'lat': list(data['Y']),
-            'anomaly': list(data['data']) if 'data' in data else []
-        }
+def _isotherm_depth(depths: list[float], temp_profile: np.ndarray) -> float | None:
+    """Linear interpolation of the depth where temperature crosses 20°C."""
+    for i in range(len(depths) - 1):
+        if temp_profile[i] >= 20.0 >= temp_profile[i + 1]:
+            t0, t1 = temp_profile[i], temp_profile[i + 1]
+            d0, d1 = depths[i], depths[i + 1]
+            if t0 == t1:
+                return round(d0, 1)
+            return round(float(d0 + (20.0 - t0) * (d1 - d0) / (t1 - t0)), 1)
+    return None
 
-    # OPeNDAP fallback
-    ds = safe_fetch_xarray(url.replace('data.json', ''))
-    if ds is not None:
-        try:
-            return {
-                'lon': ds['X'].values.tolist(),
-                'depth': ds['Z'].values.tolist(),
-                'lat': ds['Y'].values.tolist(),
-                'anomaly': ds['data'].values.tolist() if 'data' in ds else []
-            }
-        except Exception as e:
-            log.warning(f"    xarray extract: {e}")
 
-    return generate_synthetic_subsurface()
+# --------------------------------------------------------------------------
+# 8. OLR anomaly — CPC blended OLR (1°, daily) via PSL THREDDS
+# --------------------------------------------------------------------------
+OLR_URL = ("https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/"
+           "olr.cbo-1deg.day.anom.nc")
+OLR_LAT_LIM = 40.0
+OLR_DAYS = 30
 
-def generate_synthetic_subsurface():
-    lons = list(range(120, 281, 4))
-    depths = list(range(5, 301, 10))
-    anomaly = []
-    for d in depths:
-        row = []
-        dn = d / 300.0
-        for lon in lons:
-            ln = (lon - 200) / 80.0
-            v = 3.0 * np.exp(-((dn-0.35)**2)/0.04) * np.exp(-((ln+0.3)**2)/0.15)
-            v += 1.5 * np.exp(-((dn-0.15)**2)/0.02) * np.exp(-((ln-0.2)**2)/0.2)
-            v -= 0.5 * np.exp(-((dn-0.8)**2)/0.04)
-            row.append(round(v, 2))
-        anomaly.append(row)
-    log.info(f"    SYNTHETIC Subsurface: {len(lons)}×{len(depths)}")
-    return {'lon': lons, 'depth': depths, 'lat': [0], 'anomaly': anomaly}
 
-# ============================================================
-# 7. 850-hPa Wind Anomaly — NCEP/NCAR via IRI
-# ============================================================
-def fetch_wind850():
-    """Fetch 850-hPa u- and v-component wind anomaly."""
-    url_u = ("http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP-NCAR/.CDAS-1/"
-             ".MONTHLY/.Intrinsic/.PressureLevel/.u/.anomaly/Y/-30/30/RANGE/"
-             "X/120/280/RANGE/P/850/VALUE/T/(last)VALUES/data.json")
-    url_v = url_u.replace('/.u/', '/.v/')
+def fetch_olr(now: datetime) -> tuple[dict, dict]:
+    if not HAS_NETCDF4:
+        return {}, {"source": "synthetic", "error": "netCDF4 not installed"}
+    try:
+        with netCDF4.Dataset(OLR_URL) as ds:
+            lat_all = np.asarray(ds.variables["lat"][:])
+            lon_all = np.asarray(ds.variables["lon"][:])
+            time_all = np.asarray(ds.variables["time"][:])
+            ntime = len(time_all)
+            if ntime == 0:
+                return {}, {"source": "synthetic", "error": "empty OLR time axis"}
+            t0 = max(0, ntime - OLR_DAYS)
+            la = np.where(np.abs(lat_all) <= OLR_LAT_LIM)[0]
+            data = np.asarray(ds.variables["olr"][t0:ntime, la[0]:la[-1] + 1, :])
+            # mean over the window -> one anomaly map
+            data = data.mean(axis=0)
+            # last timestamp label
+            units = ds.variables["time"].units
+            t_last = float(time_all[-1])
+            last_date = netCDF4.num2date(t_last, units).strftime("%Y-%m-%d")
+    except Exception as e:  # noqa: BLE001
+        log.warning("  OLR fetch failed: %s", e)
+        return {}, {"source": "synthetic", "error": str(e)}
 
-    result = {'lon': [], 'lat': [], 'u': [], 'v': []}
+    result = {
+        "lat": [round(float(v), 2) for v in lat_all[la]],
+        "lon": [float(v) for v in lon_all],
+        "data": [[round(float(v), 1) for v in row] for row in data],
+        "date": last_date,
+        "window_days": OLR_DAYS,
+    }
+    log.info("  OK: OLR %d×%d, last %s", len(result["lat"]), len(result["lon"]), last_date)
+    return result, {"source": "live", "url": OLR_URL}
 
-    u_data = safe_fetch_json(url_u)
-    v_data = safe_fetch_json(url_v)
 
-    if u_data and 'X' in u_data:
-        result['lon'] = list(u_data['X'])
-        result['lat'] = list(u_data['Y'])
-        result['u'] = list(u_data['data']) if 'data' in u_data else []
+# --------------------------------------------------------------------------
+# 9. IRI ENSO plume — official figure URL (data table unavailable anonymously)
+#    Kept as deterministic fallback table, clearly labelled synthetic.
+# --------------------------------------------------------------------------
+IRI_PLUME_URL = "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/"
 
-    if v_data and 'X' in v_data:
-        result['v'] = list(v_data['data']) if 'data' in v_data else []
 
-    if result['u'] and result['v']:
-        log.info(f"    OK: {len(result['lon'])}×{len(result['lat'])} wind vectors")
-        return result
+def fetch_plume(now: datetime) -> tuple[dict, dict]:
+    """Plume table is not available as anonymous machine-readable data (IRI login wall).
+    Return deterministic stand-in + official figure URL; provenance=synthetic."""
+    months = []
+    for y in range(now.year, now.year + 2):
+        for m in range(1, 13):
+            if len(months) >= 15:
+                break
+            months.append(f"{y}-{m:02d}")
 
-    log.warning("    Wind fetch incomplete, using synthetic")
-    return generate_synthetic_wind()
+    model_bases = {"CFSv2": 2.71, "ECMWF": 2.65, "UKMO": 2.58,
+                   "GFDL": 2.50, "NASA": 2.55, "JMA": 2.50, "Statistical": 2.45}
+    peak_months = {"CFSv2": 5, "ECMWF": 5, "UKMO": 4,
+                   "GFDL": 6, "NASA": 5, "JMA": 4, "Statistical": 7}
+    rng = np.random.RandomState(42)  # deterministic
+    models = []
+    for name, base in model_bases.items():
+        values = []
+        for i in range(len(months)):
+            dist = i - peak_months[name]
+            shape = np.exp(-dist * dist / 18)
+            values.append(round(1.8 + (base - 1.8) * shape + (rng.random() - 0.5) * 0.15, 3))
+        models.append({"name": name, "values": values})
+    consensus = [round(float(np.mean([m["values"][i] for m in models])), 3) for i in range(len(months))]
 
-def generate_synthetic_wind():
+    log.info("  SYNTHETIC plume: %d months, %d models (data API unavailable)", len(months), len(models))
+    return {
+        "months": months,
+        "models": models,
+        "consensus": consensus,
+        "official_figure_url": IRI_PLUME_URL,
+    }, {"source": "synthetic", "url": IRI_PLUME_URL,
+        "note": "IRI data library requires login; official plume figure linked instead"}
+
+
+# --------------------------------------------------------------------------
+# 10. Wind 850hPa anomaly — no anonymous source (IRI login wall)
+# --------------------------------------------------------------------------
+def fetch_wind850() -> tuple[dict, dict]:
     lats = list(range(-30, 31, 5))
     lons = list(range(120, 291, 5))
     u, v = [], []
@@ -434,98 +639,21 @@ def generate_synthetic_wind():
         for lo in lons:
             x = (lo - 210) / 80.0
             y = la / 30.0
-            urow.append(6 * np.exp(-(x*x/0.25 + y*y/0.35)))
-            vrow.append(2 * np.exp(-(x*x/0.2 + y*y/0.15)) * (-1 if y > 0 else 1))
+            urow.append(round(6 * np.exp(-(x * x / 0.25 + y * y / 0.35)), 2))
+            vrow.append(round(2 * np.exp(-(x * x / 0.2 + y * y / 0.15)) * (-1 if y > 0 else 1), 2))
         u.append(urow)
         v.append(vrow)
-    log.info(f"    SYNTHETIC Wind: {len(lats)}×{len(lons)}")
-    return {'lon': lons, 'lat': lats, 'u': u, 'v': v}
+    log.info("  SYNTHETIC wind850 (source unavailable)")
+    return {"lon": lons, "lat": lats, "u": u, "v": v}, {
+        "source": "synthetic",
+        "note": "NCEP/NCAR reanalysis via IRI requires login; schematic field",
+    }
 
-# ============================================================
-# 8. Ensemble Plume — IRI table
-# ============================================================
-def fetch_plume():
-    """Fetch IRI ENSO plume."""
-    url = ("https://iri.columbia.edu/our-expertise/climate/"
-           "forecasts/enso/current/data/table.csv")
-    text = safe_fetch(url)
-    if text:
-        try:
-            reader = csv.reader(io.StringIO(text))
-            rows = list(reader)
-            log.info(f"    OK: {len(rows)} rows")
-            return {'raw_rows': rows}
-        except Exception as e:
-            log.warning(f"    CSV parse failed: {e}")
 
-    return generate_synthetic_plume()
-
-def generate_synthetic_plume():
-    dates = []
-    for y in range(2025, 2028):
-        max_m = 2 if y == 2027 else 12
-        for m in range(1, max_m+1):
-            dates.append(f"{y}-{m:02d}")
-
-    model_bases = {'CFSv2': 2.71, 'ECMWF': 2.65, 'UKMO': 2.58,
-                   'GFDL': 2.50, 'NASA': 2.55, 'JMA': 2.50, 'Statistical': 2.45}
-    peak_months = {'CFSv2': 21, 'ECMWF': 21, 'UKMO': 20,
-                   'GFDL': 22, 'NASA': 21, 'JMA': 20, 'Statistical': 23}
-
-    rng = np.random.RandomState(42)
-    models = []
-    for name, base in model_bases.items():
-        pk = peak_months[name]
-        values = []
-        for i in range(len(dates)):
-            if i < 12:
-                values.append(round(1.5 + rng.random()*0.5, 3))
-            else:
-                dist = i - pk
-                shape = np.exp(-dist*dist/18)
-                values.append(round(1.8 + (base-1.8)*shape + (rng.random()-0.5)*0.15, 3))
-        models.append({'name': name, 'values': values})
-
-    consensus = []
-    for i in range(len(dates)):
-        vals = [m['values'][i] for m in models]
-        consensus.append(round(np.mean(vals), 3))
-
-    log.info(f"    SYNTHETIC Plume: {len(dates)} dates, {len(models)} models")
-    return {'months': dates, 'models': models, 'consensus': consensus}
-
-# ============================================================
-# 9. Precipitation Forecast — NMME via IRI
-# ============================================================
-def fetch_precip_forecast():
-    """Fetch NMME precipitation anomaly forecast."""
-    url = ("http://iridl.ldeo.columbia.edu/SOURCES/.Models/.NMME/"
-           ".IRI-Anomaly-Forecast/.Precipitation/.pct/T/(last)/RANGE/"
-           "X/0/360/GRID/Y/-90/90/GRID/data.json")
-    data = safe_fetch_json(url)
-    if data and 'X' in data:
-        log.info(f"    OK: {len(data['X'])} lons × {len(data['Y'])} lats")
-        return {
-            'lon': list(data['X']),
-            'lat': list(data['Y']),
-            'anomaly_percent': list(data['data']) if 'data' in data else []
-        }
-
-    # OPeNDAP fallback
-    ds = safe_fetch_xarray(url.replace('data.json', ''))
-    if ds is not None:
-        try:
-            return {
-                'lon': ds['X'].values.tolist(),
-                'lat': ds['Y'].values.tolist(),
-                'anomaly_percent': ds['data'].values.tolist() if 'data' in ds else []
-            }
-        except Exception as e:
-            log.warning(f"    xarray extract: {e}")
-
-    return generate_synthetic_precip()
-
-def generate_synthetic_precip():
+# --------------------------------------------------------------------------
+# 11. NMME precipitation forecast — no anonymous source
+# --------------------------------------------------------------------------
+def fetch_precip(now: datetime) -> tuple[dict, dict]:
     lats = list(range(-60, 61, 4))
     lons = list(range(0, 361, 4))
     data = []
@@ -534,186 +662,387 @@ def generate_synthetic_precip():
         for lo in lons:
             v = 0.0
             if -10 < la < 15 and 30 < lo < 60:
-                v += 1.5 * np.exp(-((lo-45)**2/80 + (la-2)**2/40))
+                v += 1.5 * np.exp(-((lo - 45) ** 2 / 80 + (la - 2) ** 2 / 40))
             if 25 < la < 40 and 260 < lo < 290:
-                v += 1.8 * np.exp(-((lo-275)**2/60 + (la-32)**2/50))
+                v += 1.8 * np.exp(-((lo - 275) ** 2 / 60 + (la - 32) ** 2 / 50))
             if -20 < la < 0 and 270 < lo < 290:
-                v += 2.0 * np.exp(-((lo-280)**2/40 + (la+8)**2/30))
+                v += 2.0 * np.exp(-((lo - 280) ** 2 / 40 + (la + 8) ** 2 / 30))
             if -15 < la < 5 and 100 < lo < 150:
-                v -= 2.5 * np.exp(-((lo-125)**2/100 + (la+2)**2/60))
+                v -= 2.5 * np.exp(-((lo - 125) ** 2 / 100 + (la + 2) ** 2 / 60))
             if -15 < la < 0 and 310 < lo < 340:
-                v -= 1.5 * np.exp(-((lo-325)**2/50 + (la+5)**2/40))
+                v -= 1.5 * np.exp(-((lo - 325) ** 2 / 50 + (la + 5) ** 2 / 40))
             if -30 < la < -10 and 20 < lo < 40:
-                v -= 1.0 * np.exp(-((lo-30)**2/30 + (la+20)**2/30))
+                v -= 1.0 * np.exp(-((lo - 30) ** 2 / 30 + (la + 20) ** 2 / 30))
             row.append(round(v, 2))
         data.append(row)
-    log.info(f"    SYNTHETIC Precip: {len(lats)}×{len(lons)}")
-    return {'lon': lons, 'lat': lats, 'anomaly_percent': data}
-
-# ============================================================
-# 10. ENSO Advisory Status — CPC scrape
-# ============================================================
-def fetch_enso_status():
-    """Scrape CPC ENSO advisory page for current status."""
-    url = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/"
-    text = safe_fetch(url, timeout=15)
-    if text:
-        # Simple keyword extraction
-        advisory = "El Niño Advisory"
-        strength = "Strong"
-        if "La Niña" in text or "La Nina" in text:
-            advisory = "La Niña Advisory"
-        elif "Neutral" in text or "neutral" in text:
-            advisory = "ENSO Neutral"
-        if "Super" in text or "record" in text.lower():
-            strength = "Super El Niño"
-        log.info(f"    OK: {advisory} ({strength})")
-        return {'advisory': advisory, 'strength': strength}
-
-    log.warning("    Scrape failed, defaulting")
-    return {'advisory': 'El Niño Advisory', 'strength': 'Strong'}
-
-# ============================================================
-# Main — assemble exact schema
-# ============================================================
-def main():
-    log.info("=" * 60)
-    log.info("El Niño 2026 Data Pipeline — Starting")
-    log.info(f"Output: {OUTPUT_FILE}")
-    log.info(f"xarray: {'✓' if HAS_XARRAY else '✗'}  pandas: {'✓' if HAS_PANDAS else '✗'}")
-    log.info("=" * 60)
-
-    pipeline_status = {}
-    errors = []
-
-    log.info("[1/10] Niño 3.4 SST...")
-    try:
-        nino34 = fetch_nino34()
-        pipeline_status['nino34'] = 'OK' if len(nino34) > 10 else 'PARTIAL'
-    except Exception as e:
-        nino34 = generate_synthetic_nino34()
-        pipeline_status['nino34'] = f'ERROR: {e}'
-        errors.append(f"nino34: {e}")
-
-    log.info("[2/10] ONI...")
-    try:
-        oni = fetch_oni()
-        pipeline_status['oni'] = 'OK' if len(oni) > 10 else 'PARTIAL'
-    except Exception as e:
-        oni = generate_synthetic_oni()
-        pipeline_status['oni'] = f'ERROR: {e}'
-        errors.append(f"oni: {e}")
-
-    log.info("[3/10] SOI...")
-    try:
-        soi = fetch_soi()
-        pipeline_status['soi'] = 'OK' if len(soi) > 10 else 'PARTIAL'
-    except Exception as e:
-        soi = generate_synthetic_soi()
-        pipeline_status['soi'] = f'ERROR: {e}'
-        errors.append(f"soi: {e}")
-
-    log.info("[4/10] WWV (Warm Water Volume)...")
-    try:
-        wwv = fetch_wwv()
-        pipeline_status['wwv'] = 'OK' if len(wwv) > 10 else 'PARTIAL'
-    except Exception as e:
-        wwv = generate_synthetic_wwv()
-        pipeline_status['wwv'] = f'ERROR: {e}'
-        errors.append(f"wwv: {e}")
-
-    log.info("[5/10] OLR Anomaly...")
-    try:
-        olr = fetch_olr()
-        pipeline_status['olr'] = 'OK' if olr.get('data') else 'PARTIAL'
-    except Exception as e:
-        olr = generate_synthetic_olr()
-        pipeline_status['olr'] = f'ERROR: {e}'
-        errors.append(f"olr: {e}")
-
-    log.info("[6/10] Subsurface Temperature (GODAS)...")
-    try:
-        subsurface = fetch_subsurface()
-        pipeline_status['subsurface'] = 'OK' if subsurface.get('anomaly') else 'PARTIAL'
-    except Exception as e:
-        subsurface = generate_synthetic_subsurface()
-        pipeline_status['subsurface'] = f'ERROR: {e}'
-        errors.append(f"subsurface: {e}")
-
-    log.info("[7/10] 850-hPa Wind Anomaly...")
-    try:
-        wind850 = fetch_wind850()
-        pipeline_status['wind850'] = 'OK' if wind850.get('u') and wind850.get('v') else 'PARTIAL'
-    except Exception as e:
-        wind850 = generate_synthetic_wind()
-        pipeline_status['wind850'] = f'ERROR: {e}'
-        errors.append(f"wind850: {e}")
-
-    log.info("[8/10] Ensemble Plume...")
-    try:
-        plume = fetch_plume()
-        pipeline_status['plume'] = 'OK' if 'models' in plume or 'raw_rows' in plume else 'PARTIAL'
-    except Exception as e:
-        plume = generate_synthetic_plume()
-        pipeline_status['plume'] = f'ERROR: {e}'
-        errors.append(f"plume: {e}")
-
-    log.info("[9/10] Precipitation Forecast...")
-    try:
-        precip = fetch_precip_forecast()
-        pipeline_status['precip'] = 'OK' if precip.get('anomaly_percent') else 'PARTIAL'
-    except Exception as e:
-        precip = generate_synthetic_precip()
-        pipeline_status['precip'] = f'ERROR: {e}'
-        errors.append(f"precip: {e}")
-
-    log.info("[10/10] ENSO Advisory Status...")
-    try:
-        enso_status = fetch_enso_status()
-        pipeline_status['enso_status'] = 'OK'
-    except Exception as e:
-        enso_status = {'advisory': 'El Niño Advisory', 'strength': 'Strong'}
-        pipeline_status['enso_status'] = f'ERROR: {e}'
-        errors.append(f"enso_status: {e}")
-
-    # Assemble exact schema
-    output = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "nino34_weekly": nino34[-12:] if nino34 else [],  # last 12 for sparkline
-        "oni_monthly": oni[-6:] if oni else [],
-        "soi_monthly": soi[-12:] if soi else [],
-        "wwv_monthly": wwv[-12:] if wwv else [],
-        "olr_anomaly": olr,
-        "subsurface_temp": subsurface,
-        "wind850_anomaly": wind850,
-        "ensemble_plume": plume,
-        "precip_forecast": precip,
-        "enso_status": enso_status,
-        "_pipeline": {
-            "version": "2.0.0",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "status": pipeline_status,
-            "errors": errors,
-            "xarray_available": HAS_XARRAY,
-            "pandas_available": HAS_PANDAS
-        }
+    log.info("  SYNTHETIC precip forecast (source unavailable)")
+    return {"lon": lons, "lat": lats, "anomaly_percent": data}, {
+        "source": "synthetic",
+        "note": "NMME via IRI requires login; climatological schematic",
     }
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, 'w') as f:
-        json.dump(output, f, indent=2)
 
-    size_kb = os.path.getsize(OUTPUT_FILE) / 1024
-    log.info(f"\nOutput: {OUTPUT_FILE} ({size_kb:.1f} KB)")
-    log.info(f"Pipeline status: {pipeline_status}")
-    if errors:
-        log.warning(f"Errors: {len(errors)}")
-        for e in errors:
-            log.warning(f"  - {e}")
+# --------------------------------------------------------------------------
+# Derived diagnostics
+# --------------------------------------------------------------------------
+def latest(series: list[dict], key: str = "value") -> dict | None:
+    return series[-1] if series else None
+
+
+def oni_category(v: float) -> str:
+    av = abs(v)
+    if av < 0.5:
+        return "ENSO Neutral"
+    if av < 1.0:
+        return "Weak El Niño" if v > 0 else "Weak La Niña"
+    if av < 1.5:
+        return "Moderate El Niño" if v > 0 else "Moderate La Niña"
+    if av < 2.0:
+        return "Strong El Niño" if v > 0 else "Strong La Niña"
+    return "Very Strong El Niño" if v > 0 else "Very Strong La Niña"
+
+
+def event_comparison(oni: list[dict]) -> dict:
+    """Find historical ENSO events and their peak ONI from the full ONI series."""
+    events = []
+    cur = None
+    for rec in oni:
+        active = rec["value"] >= 0.5
+        if active and cur is None:
+            cur = {"start": f"{rec['year']}", "peak": rec["value"], "peak_season": rec["season"]}
+        elif active and cur is not None:
+            if rec["value"] > cur["peak"]:
+                cur["peak"] = rec["value"]
+                cur["peak_season"] = rec["season"]
+        elif not active and cur is not None:
+            cur["end"] = f"{rec['year']}"
+            events.append(cur)
+            cur = None
+    if cur is not None:
+        cur["active"] = True
+        events.append(cur)
+    labels = {
+        ("1982", "1983"): "1982–83",
+        ("1997", "1998"): "1997–98",
+        ("2015", "2016"): "2015–16",
+        ("2023", "2024"): "2023–24",
+        ("2025", "2026"): "2025–26",
+    }
+    result = []
+    for ev in events:
+        if not ev.get("active") and ev["peak"] < 0.6:
+            continue  # suppress borderline blips
+        key = (ev.get("start", ""), ev.get("end", ""))
+        ev["label"] = labels.get(key, f"{ev.get('start','?')}–{ev.get('end', ev.get('start','?'))}")
+        if ev.get("active"):
+            ev["label"] = f"{ev['start']}–{int(ev['start']) + 1} (developing)"
+        ev["category"] = oni_category(ev["peak"])
+        result.append(ev)
+    return {"events": result}
+
+
+def compute_changes(prev: dict | None, cur: dict) -> dict:
+    """Diff of headline values vs previous run (feeds briefing + UI)."""
+    if not prev:
+        return {"note": "first run — no previous data"}
+
+    def head(series: list, key: str):
+        if not series:
+            return None
+        last = series[-1]
+        return last.get(key) if isinstance(last, dict) else None
+
+    changes = {}
+    pairs = [
+        ("nino34", "nino34_monthly", "nino34_weekly"),
+        ("oni", "oni_monthly", None),
+        ("soi", "soi_monthly", None),
+        ("mei", "mei_monthly", None),
+        ("wwv", "wwv_monthly", None),
+    ]
+    for name, cur_key, prev_key in pairs:
+        prev_series = prev.get(prev_key or cur_key) or prev.get(cur_key, [])
+        cur_series = cur.get(cur_key, [])
+        pv = head(prev_series, "value") if isinstance(prev_series, list) else None
+        cv = head(cur_series, "value") if isinstance(cur_series, list) else None
+        if pv is not None and cv is not None and pv != cv:
+            changes[name] = {
+                "previous": round(pv, 2),
+                "current": round(cv, 2),
+                "delta": round(cv - pv, 2),
+            }
+    if prev.get("enso_status") and cur.get("enso_status"):
+        ps = prev["enso_status"].get("advisory")
+        cs = cur["enso_status"].get("advisory")
+        if ps != cs:
+            changes["advisory"] = {"previous": ps, "current": cs}
+    return changes
+
+
+# --------------------------------------------------------------------------
+# Assemble + write outputs
+# --------------------------------------------------------------------------
+def _round_json(obj):
+    return obj  # values are rounded at parse time
+
+
+def _safe_json_size(obj) -> int:
+    try:
+        return len(json.dumps(obj))
+    except TypeError:
+        return -1
+
+
+def _find_non_json(obj, path="payload"):
+    """Return first non-JSON-serializable value path (debug helper)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            r = _find_non_json(v, f"{path}.{k}")
+            if r:
+                return r
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            r = _find_non_json(v, f"{path}[{i}]")
+            if r:
+                return r
+    elif isinstance(obj, (str, int, float, bool, type(None))):
+        return None
     else:
-        log.info("All endpoints OK — no errors.")
-    log.info("Pipeline complete.")
-    return 0 if len(errors) == 0 else 1
+        return f"{path}: {type(obj).__name__} = {obj!r}"
+    return None
 
-if __name__ == '__main__':
+
+def write_outputs(out_dir: Path, payload: dict, meta: dict, max_history: int):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    hist_dir = out_dir / "history"
+    hist_dir.mkdir(exist_ok=True)
+
+    (out_dir / "data.json").write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    hist_path = hist_dir / f"{today}.json"
+    if hist_path.exists():
+        hist_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    else:
+        hist_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+
+    # prune old history
+    old = sorted(hist_dir.glob("*.json"))
+    for p in old[:-max_history]:
+        p.unlink()
+
+    # previous.json = state before this run (for diffing on next run)
+    log.info("Outputs written to %s (data.json %.1f KB)", out_dir, (out_dir / "data.json").stat().st_size / 1024)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="El Niño 2026 pipeline v3")
+    ap.add_argument("--out", default=".", help="output directory (default: cwd)")
+    ap.add_argument("--max-history", type=int, default=30, help="history files to keep")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args()
+
+    out_dir = Path(args.out).resolve()
+    _setup_logging(out_dir / "pipeline.log")
+    now = datetime.now(timezone.utc)
+    started = time.time()
+
+    log.info("=" * 70)
+    log.info("El Niño 2026 Pipeline v%s — %s", VERSION, now.isoformat())
+    log.info("netCDF4: %s", "✓" if HAS_NETCDF4 else "✗")
+    log.info("=" * 70)
+
+    endpoints = {}
+    status = {}
+
+    def run(name: str, fn):
+        t0 = time.time()
+        try:
+            data, meta = fn()
+        except Exception as e:  # noqa: BLE001
+            log.error("  %s CRASHED: %s", name, e)
+            status[name] = {"source": "error", "error": str(e), "latency_ms": int((time.time() - t0) * 1000)}
+            return
+        status[name] = {
+            "source": meta.get("source", "unknown"),
+            "latency_ms": int((time.time() - t0) * 1000),
+        }
+        for k in ("url", "error", "note"):
+            if meta.get(k):
+                status[name][k] = meta[k]
+        endpoints[name] = data
+        log.info("[done] %s (%s, %d ms)", name, meta.get("source"), status[name]["latency_ms"])
+
+    log.info("[1/11] CPC sstoi (monthly Niño regions)...")
+    run("cpc_sstoi", fetch_cpc_sstoi)
+    log.info("[2/11] CPC wksst (weekly Niño regions)...")
+    run("cpc_weekly", fetch_cpc_weekly)
+    log.info("[3/11] CPC ONI...")
+    run("cpc_oni", fetch_cpc_oni)
+    log.info("[4/11] CPC SOI...")
+    run("cpc_soi", fetch_cpc_soi)
+    log.info("[5/11] PSL MEI v2...")
+    run("psl_mei", fetch_psl_mei)
+    log.info("[6/11] CPC ENSO Diagnostic Discussion...")
+    run("cpc_ensodisc", fetch_cpc_ensodisc)
+    log.info("[7/11] GODAS subsurface (Hovmöller/WWV/thermocline)...")
+    run("godas", lambda: fetch_godas(now, out_dir))
+    log.info("[8/11] OLR anomaly (CPC blended, 1°)...")
+    run("olr", lambda: fetch_olr(now))
+    log.info("[9/11] IRI ENSO plume...")
+    run("plume", lambda: fetch_plume(now))
+    log.info("[10/11] 850hPa wind anomaly...")
+    run("wind850", fetch_wind850)
+    log.info("[11/11] NMME precipitation forecast...")
+    run("precip", lambda: fetch_precip(now))
+
+    # ---------------- assemble payload ----------------
+    sstoi = endpoints.get("cpc_sstoi", {})
+    weekly = endpoints.get("cpc_weekly", {})
+    oni = endpoints.get("cpc_oni", [])
+    soi = endpoints.get("cpc_soi", [])
+    mei = endpoints.get("psl_mei", [])
+    godas = endpoints.get("godas", {})
+    olr = endpoints.get("olr", {})
+    plume = endpoints.get("plume", {})
+    wind = endpoints.get("wind850", {})
+    precip = endpoints.get("precip", {})
+    status_block = endpoints.get("cpc_ensodisc", {})
+
+    wwv_monthly = []
+    if godas.get("wwv_anomaly"):
+        for i, m in enumerate(godas.get("months", [])):
+            wwv_monthly.append({"date": f"{m}-15", "value": godas["wwv_anomaly"][i]})
+
+    nino34_monthly = sstoi.get("nino34", [])
+    nino34_weekly = weekly.get("nino34", [])
+    oni_monthly = oni
+    soi_monthly = soi
+    mei_monthly = mei
+
+    current = {
+        "nino34": latest(nino34_weekly) or latest(nino34_monthly),
+        "oni": latest(oni_monthly),
+        "soi": latest(soi_monthly),
+        "mei": latest(mei_monthly),
+        "wwv": latest(wwv_monthly),
+    }
+    if status_block.get("indices"):
+        current["nino34_official"] = status_block["indices"]
+
+    category = None
+    if oni_monthly:
+        last_oni = oni_monthly[-1]["value"]
+        category = oni_category(last_oni)
+    elif current.get("nino34"):
+        category = oni_category(current["nino34"]["value"])
+
+    payload = {
+        "schema_version": VERSION,
+        "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "nino34_monthly": nino34_monthly,
+        "nino34_weekly": nino34_weekly[-52:],
+        "oni_monthly": oni_monthly,
+        "soi_monthly": soi_monthly,
+        "mei_monthly": mei_monthly,
+        "wwv_monthly": wwv_monthly,
+        "olr_anomaly": olr,
+        "subsurface_temp": {
+            "lon": godas.get("lon", []),
+            "depth": godas.get("depth", []),
+            "lat": godas.get("lat", []),
+            "months": godas.get("months", []),
+            "absolute": godas.get("absolute", []),
+            "anomaly": godas.get("anomaly", []),
+            "thermocline_depth": godas.get("thermocline_depth", []),
+            "climatology": godas.get("climatology"),
+        },
+        "wind850_anomaly": wind,
+        "ensemble_plume": plume,
+        "precip_forecast": precip,
+        "enso_status": {
+            "advisory": status_block.get("advisory", "Unknown"),
+            "strength": status_block.get("strength") or category or "Unknown",
+            "category": category,
+            "issued": status_block.get("issued"),
+            "next_discussion": status_block.get("next_discussion"),
+            "synopsis": status_block.get("synopsis"),
+            "indices": status_block.get("indices", {}),
+            "probabilities": status_block.get("probabilities", {}),
+            "url": CPC_ENSO_DISC_URL,
+        },
+        "current": current,
+        "comparison": event_comparison(oni_monthly) if oni_monthly else {"events": []},
+        "sources": {
+            "nino34": status.get("cpc_sstoi", {}).get("source"),
+            "nino34_weekly": status.get("cpc_weekly", {}).get("source"),
+            "oni": status.get("cpc_oni", {}).get("source"),
+            "soi": status.get("cpc_soi", {}).get("source"),
+            "mei": status.get("psl_mei", {}).get("source"),
+            "subsurface": status.get("godas", {}).get("source"),
+            "olr": status.get("olr", {}).get("source"),
+            "plume": status.get("plume", {}).get("source"),
+            "wind850": status.get("wind850", {}).get("source"),
+            "precip": status.get("precip", {}).get("source"),
+            "enso_status": status.get("cpc_ensodisc", {}).get("source"),
+        },
+        "_pipeline": {
+            "version": VERSION,
+            "timestamp": now.isoformat(),
+            "duration_sec": round(time.time() - started, 1),
+            "status": status,
+            "errors": [v.get("error") for v in status.values() if v.get("source") == "error"],
+        },
+    }
+
+    # diff vs previous run (history/latest.json kept as previous.json)
+    prev_path = out_dir / "history" / "previous.json"
+    prev = None
+    if prev_path.exists():
+        try:
+            prev = json.loads(prev_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            prev = None
+    payload["changes_since_previous"] = compute_changes(prev, payload)
+
+    _bad = _find_non_json(payload)
+    if _bad:
+        log.error("NON-JSON VALUE FOUND: %s", _bad)
+
+    # meta.json — health matrix
+    live_count = sum(1 for v in status.values() if v.get("source") == "live")
+    synthetic_count = sum(1 for v in status.values() if v.get("source") == "synthetic")
+    meta = {
+        "schema_version": VERSION,
+        "generated_at": payload["generated_at"],
+        "health": status,
+        "summary": {
+            "endpoints_total": len(status),
+            "live": live_count,
+            "derived": sum(1 for v in status.values() if v.get("source") == "derived"),
+            "synthetic": synthetic_count,
+            "error": sum(1 for v in status.values() if v.get("source") == "error"),
+        },
+        "debug_non_json": _find_non_json(payload),
+        "checksum": {
+            "data.json_size_bytes": _safe_json_size(payload),
+        },
+    }
+
+    write_outputs(out_dir, payload, meta, args.max_history)
+
+    # keep a copy of the new payload as previous.json for the next run's diff
+    (out_dir / "history" / "previous.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    log.info("-" * 70)
+    log.info("Health: %d/%d live · %d derived · %d synthetic · %d error",
+             meta["summary"]["live"], meta["summary"]["endpoints_total"],
+             meta["summary"]["derived"], meta["summary"]["synthetic"],
+             meta["summary"]["error"])
+    log.info("Pipeline finished in %.1fs", meta["duration_sec"] if False else time.time() - started)
+    return 0 if meta["summary"]["error"] == 0 else 1
+
+
+if __name__ == "__main__":
     sys.exit(main())

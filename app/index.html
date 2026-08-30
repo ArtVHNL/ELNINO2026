@@ -3,11 +3,43 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>El Niño 2026 — Live ENSO Monitoring Dashboard</title>
+    <meta name="description" content="Live monitoring of the 2026–27 El Niño event: Niño 3.4 SST anomalies, ONI, SOI, MEI v2, GODAS subsurface temperatures, thermocline depth, warm water volume, model forecasts and the official CPC advisory — updated automatically twice daily from NOAA/PSL/CPC data." />
+    <meta name="keywords" content="El Niño, La Niña, ENSO, Niño 3.4, ONI, SOI, MEI, climate monitoring, NOAA, GODAS, thermocline, 2026" />
+    <meta name="author" content="ArtVHNL" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0B0F19" />
+    <link rel="canonical" href="https://ArtVHNL.github.io/ELNINO2026/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="El Niño 2026 — Live ENSO Monitoring Dashboard" />
+    <meta property="og:description" content="Real-time ocean & atmosphere ENSO monitoring: official NOAA/CPC indices, GODAS subsurface analysis, model forecasts and an AI expert briefing." />
+    <meta property="og:url" content="https://ArtVHNL.github.io/ELNINO2026/" />
+    <meta property="og:site_name" content="El Niño 2026 Dashboard" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="El Niño 2026 — Live ENSO Monitoring Dashboard" />
+    <meta name="twitter:description" content="Real-time ocean & atmosphere ENSO monitoring from official NOAA/PSL/CPC data." />
+
+    <!-- Structured data: schema.org Dataset -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Dataset",
+      "name": "El Niño 2026 Live Monitoring Dataset",
+      "description": "Automatically updated ENSO monitoring data: Niño region SST anomalies, ONI, SOI, MEI v2, GODAS subsurface temperature, thermocline depth, warm water volume, OLR anomaly and official CPC advisory status.",
+      "url": "https://ArtVHNL.github.io/ELNINO2026/data.json",
+      "creator": { "@type": "Organization", "name": "El Niño 2026 Dashboard" },
+      "license": "https://www.usa.gov/government-works",
+      "temporalCoverage": "1982/2026",
+      "spatialCoverage": { "@type": "Place", "name": "Tropical Pacific Ocean" }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

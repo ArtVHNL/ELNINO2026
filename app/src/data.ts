@@ -31,13 +31,19 @@ export interface OlrAnomaly {
   lat: number[];
   lon: number[];
   data: number[][];
+  date?: string;
+  window_days?: number;
 }
 
 export interface SubsurfaceTemp {
   lon: number[];
   depth: number[];
   lat: number[];
-  anomaly: number[][];
+  months: string[];
+  absolute: number[][][];
+  anomaly: number[][][];
+  thermocline_depth: (number | null)[][];
+  climatology?: string | null;
 }
 
 export interface Wind850Anomaly {
@@ -67,13 +73,69 @@ export interface PrecipForecast {
 export interface EnsoStatus {
   advisory: string;
   strength: string;
+  category?: string | null;
+  issued?: string | null;
+  next_discussion?: string | null;
+  synopsis?: string | null;
+  indices?: Record<string, number | string>;
+  probabilities?: Record<string, string>;
+  url?: string;
+}
+
+export interface CurrentValues {
+  nino34?: { date: string; value: number };
+  oni?: { season: string; year: number; value: number };
+  soi?: { date: string; value: number };
+  mei?: { date: string; value: number };
+  wwv?: { date: string; value: number };
+  nino34_official?: Record<string, number | string>;
+}
+
+export interface ComparisonEvent {
+  start?: string;
+  end?: string;
+  peak: number;
+  peak_season: string;
+  label: string;
+  category: string;
+  active?: boolean;
+}
+
+export interface SourceMap {
+  nino34: string;
+  nino34_weekly: string;
+  oni: string;
+  soi: string;
+  mei: string;
+  subsurface: string;
+  olr: string;
+  plume: string;
+  wind850: string;
+  precip: string;
+  enso_status: string;
+}
+
+export interface ExpertBriefing {
+  generated_at: string;
+  model: string;
+  headline: string;
+  summary: string;
+  what_changed: string[];
+  outlook: string;
+  risks: string[];
+  data_confidence: "high" | "medium" | "low";
+  news?: { title: string; source: string; url: string; summary: string }[];
+  disclaimer: string;
 }
 
 export interface EnsoDashboardData {
+  schema_version: string;
   generated_at: string;
+  nino34_monthly: Nino34Weekly[];
   nino34_weekly: Nino34Weekly[];
   oni_monthly: OniMonthly[];
   soi_monthly: SoiMonthly[];
+  mei_monthly: Nino34Weekly[];
   wwv_monthly: WwvMonthly[];
   olr_anomaly: OlrAnomaly;
   subsurface_temp: SubsurfaceTemp;
@@ -81,78 +143,77 @@ export interface EnsoDashboardData {
   ensemble_plume: EnsemblePlume;
   precip_forecast: PrecipForecast;
   enso_status: EnsoStatus;
+  current: CurrentValues;
+  comparison: { events: ComparisonEvent[] };
+  sources: SourceMap;
+  changes_since_previous?:
+    | { note: string }
+    | Record<string, { previous: number; current: number; delta: number }>;
 }
 
 // ============================================================================
-// Live Data Fetch — Proxy client
+// Live Data Fetch — same-origin static payload with graceful fallbacks
 // ============================================================================
 
-export type DataSource = 'live' | 'mock' | 'error';
+export type DataSource = "live" | "derived" | "synthetic" | "error";
 
-const PROXY_URL = 'http://127.0.0.1:8899/api/livedata';
+const DATA_URLS = [
+  "data.json", // same-origin (GitHub Pages production)
+  "https://raw.githubusercontent.com/ArtVHNL/ELNINO2026/main/data.json", // raw fallback
+  "/api/livedata", // local dev proxy (Vite -> Flask/Node)
+];
+const BRIEFING_URLS = [
+  "news/latest.json",
+  "https://raw.githubusercontent.com/ArtVHNL/ELNINO2026/main/news/latest.json",
+];
 const FETCH_TIMEOUT_MS = 8000;
 
+async function fetchFirst(urls: string[]): Promise<unknown | null> {
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const resp = await fetch(url, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      clearTimeout(timer);
+      if (!resp.ok) {
+        console.warn(`[fetchFirst] ${resp.status} ${url}`);
+        continue;
+      }
+      return await resp.json();
+    } catch (err) {
+      console.warn(`[fetchFirst] failed ${url}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return null;
+}
+
 /**
- * fetchLiveEnsoData()
- *
- * Haalt realtime ENSO-data op van de Flask proxy.
- * Retourneert de geparseerde EnsoDashboardData, of null bij fout.
- *
- * De Flask proxy (server.py) fungeert als CORS-brug en haalt data op van
- * 10+ NOAA/IRI/PMEL endpoints. Bij een endpoint-fout valt de proxy terug
- * op synthetische data (per-endpoint fallback, nooit een hardcoded dataset).
+ * fetchLiveEnsoData() — loads the latest pipeline output (data.json).
+ * Tries same-origin first (static hosting), then the GitHub raw mirror,
+ * then the local dev proxy. Returns null only if all sources fail.
  */
 export async function fetchLiveEnsoData(): Promise<EnsoDashboardData | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    const resp = await fetch(PROXY_URL, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
-
-    clearTimeout(timer);
-
-    if (!resp.ok) {
-      console.error(
-        `[fetchLiveEnsoData] HTTP ${resp.status} ${resp.statusText} — proxy offline?`
-      );
-      return null;
-    }
-
-    const json = await resp.json();
-
-    // Validate minimale structuur
-    if (!json || !json.nino34_weekly || !json.soi_monthly || !json.enso_status) {
-      console.error(
-        '[fetchLiveEnsoData] Proxy returned incomplete data — missing required fields'
-      );
-      return null;
-    }
-
-    console.log(
-      `[fetchLiveEnsoData] ✓ Live data geladen (${json.generated_at})`
-    );
-    if (json._pipeline?.errors?.length > 0) {
-      console.warn(
-        `[fetchLiveEnsoData] Proxy meldt ${json._pipeline.errors.length} endpoint-fouten`,
-        json._pipeline.errors
-      );
-    }
-
-    return json as EnsoDashboardData;
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[fetchLiveEnsoData] Timeout — proxy niet bereikbaar op', PROXY_URL);
-    } else {
-      console.error(
-        '[fetchLiveEnsoData] Netwerkfout:',
-        err instanceof Error ? err.message : String(err)
-      );
-    }
+  const json = await fetchFirst(DATA_URLS);
+  if (!json) return null;
+  const data = json as EnsoDashboardData;
+  if (!data.nino34_monthly || !data.soi_monthly || !data.enso_status) {
+    console.error("[fetchLiveEnsoData] incomplete payload");
     return null;
   }
+  return data;
+}
+
+/** fetchExpertBriefing() — AI briefing + news digest (optional content). */
+export async function fetchExpertBriefing(): Promise<ExpertBriefing | null> {
+  const json = await fetchFirst(BRIEFING_URLS);
+  if (!json) return null;
+  const b = json as ExpertBriefing;
+  if (!b.headline || !b.summary) return null;
+  return b;
 }
 
 // ============================================================================

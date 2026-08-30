@@ -1,23 +1,29 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { 
-  Flame, 
-  Wind, 
-  TrendingDown, 
-  Info, 
-  CheckCircle, 
-  Thermometer, 
-  Compass, 
-  Database
+import {
+  Flame,
+  Wind,
+  TrendingDown,
+  Info,
+  CheckCircle,
+  Thermometer,
+  Compass,
+  Database,
+  Activity,
+  Newspaper,
+  ShieldAlert
 } from "lucide-react";
-import { EnsoDashboardData, fetchLiveEnsoData } from "./data";
+import { EnsoDashboardData, ExpertBriefing, fetchLiveEnsoData, fetchExpertBriefing } from "./data";
 
 // Core Modular Meteorological Components
 import { SparklineMini } from "./components/SparklineMini";
 import { CoupledTimeSeriesChart } from "./components/CoupledTimeSeriesChart";
 import { EnsemblePlumesChart } from "./components/EnsemblePlumesChart";
 import { HovmollerDiagram } from "./components/HovmollerDiagram";
-import { GeographicContoursMap } from "./components/GeographicContoursMap";
+// Deck.gl + MapLibre are heavy (~1.3 MB) — load the map only when rendered
+const GeographicContoursMap = lazy(() =>
+  import("./components/GeographicContoursMap").then(m => ({ default: m.GeographicContoursMap }))
+);
 import { WalkerCirculationSection } from "./components/WalkerCirculationSection";
 import { RegionalImpactAtlasSection } from "./components/RegionalImpactAtlasSection";
 import { HistoricAnalogsSection } from "./components/HistoricAnalogsSection";
@@ -62,9 +68,9 @@ const getSimulatedData = (scen: "active" | "neutral" | "lanina" | "modoki", base
     cloned.wwv_monthly = cloned.wwv_monthly.map(d => ({ ...d, value: d.value * 0.12 }));
     cloned.oni_monthly = cloned.oni_monthly.map(d => ({ ...d, value: d.value * 0.12 }));
 
-    // Subsurface neutral thermal anomalies
-    cloned.subsurface_temp.anomaly = cloned.subsurface_temp.anomaly.map(row => 
-      row.map(val => val * 0.15)
+    // Subsurface neutral thermal anomalies (months × depth × lon)
+    cloned.subsurface_temp.anomaly = cloned.subsurface_temp.anomaly.map(month =>
+      month.map(row => row.map(val => val * 0.15))
     );
 
     // Minor flat anomalies on maps
@@ -94,14 +100,14 @@ const getSimulatedData = (scen: "active" | "neutral" | "lanina" | "modoki", base
     cloned.oni_monthly = cloned.oni_monthly.map(d => ({ ...d, value: -d.value * 0.7 }));
 
     // Deep east Pacific cooling, thermocline rise
-    cloned.subsurface_temp.anomaly = cloned.subsurface_temp.anomaly.map((row) => 
-      row.map((val, lIdx) => {
+    cloned.subsurface_temp.anomaly = cloned.subsurface_temp.anomaly.map(month =>
+      month.map(row => row.map((val, lIdx) => {
         if (lIdx < 16) {
           return Math.max(-0.4, val * 0.35); // Western pool warmth
         } else {
           return -val * 0.75; // Eastern cold water plunge
         }
-      })
+      }))
     );
 
     // Spatial fields flipped positive-to-negative
@@ -131,14 +137,14 @@ const getSimulatedData = (scen: "active" | "neutral" | "lanina" | "modoki", base
     cloned.oni_monthly = cloned.oni_monthly.map(d => ({ ...d, value: d.value * 0.55 }));
 
     // Warmth centers in Central Pacific
-    cloned.subsurface_temp.anomaly = cloned.subsurface_temp.anomaly.map(row => 
-      row.map((val, lIdx) => {
+    cloned.subsurface_temp.anomaly = cloned.subsurface_temp.anomaly.map(month =>
+      month.map(row => row.map((val, lIdx) => {
         if (lIdx >= 10 && lIdx <= 26) {
           return val * 0.85;
         } else {
           return -val * 0.45;
         }
-      })
+      }))
     );
 
     // Central cloud anomalies
@@ -195,6 +201,7 @@ export default function App() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [isAuditOpen, setIsAuditOpen] = useState(true);
   const [mapType, setMapType] = useState<"olr" | "precip">("precip");
+  const [briefing, setBriefing] = useState<ExpertBriefing | null>(null);
 
   // --- Live data fetch on mount + hourly polling ---
   useEffect(() => {
@@ -230,6 +237,15 @@ export default function App() {
       cancelled = true;
       clearInterval(intervalId);
     };
+  }, []);
+
+  // AI expert briefing + news digest (optional, non-blocking)
+  useEffect(() => {
+    let cancelled = false;
+    fetchExpertBriefing().then(b => {
+      if (!cancelled && b) setBriefing(b);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   // --- Reken scenario op basis van liveData ---
@@ -283,7 +299,7 @@ export default function App() {
             </h2>
             <p className="text-sm text-gray-400 font-light max-w-md">
               {isLoading
-                ? 'Connecting to Flask proxy at http://127.0.0.1:8899/api/livedata ...'
+                ? 'Loading live ENSO data from NOAA/PSL/CPC endpoints ...'
                 : dataError
                   ? `⚠ ${dataError}`
                   : 'Waiting for initial data...'}
@@ -299,11 +315,8 @@ export default function App() {
           </div>
 
           <div className="mt-8 text-[10px] text-gray-600 font-mono text-center max-w-md leading-relaxed">
-            <p>Start de Flask proxy in Terminal 1:</p>
-            <code className="block mt-1 px-3 py-2 bg-black/40 rounded border border-white/5 text-gray-400">
-              cd C:\Users\Art\Programmeren\El Nino 2026\FINAL &amp; python server.py
-            </code>
-            <p className="mt-2 text-gray-600">Het dashboard laadt automatisch zodra de proxy data serveert.</p>
+            <p>Fetching data.json — live indices, GODAS ocean fields and the latest CPC advisory.</p>
+            <p className="mt-2 text-gray-600">If this persists, check the site status or GitHub Actions pipeline health.</p>
           </div>
         </motion.div>
       </div>
@@ -319,8 +332,28 @@ export default function App() {
   const currentSOI = sop.length > 0 ? sop[sop.length - 1].value : 0;
   const currentWWV = wvp.length > 0 ? wvp[wvp.length - 1].value : 0;
   const lastONI = oni.length > 0 ? oni[oni.length - 1].value : 0;
-  const dataSourceLabel = dataError ? 'ERROR' : 'LIVE NOAA';
-  const dataSourceColor = dataError ? 'text-red-400' : 'text-green-400';
+  const sourceCounts = useMemo(() => {
+    const counts = { live: 0, derived: 0, synthetic: 0 };
+    if (!displayData?.sources) return counts;
+    Object.values(displayData.sources).forEach(src => {
+      if (src === "live") counts.live += 1;
+      else if (src === "derived") counts.derived += 1;
+      else if (src === "synthetic") counts.synthetic += 1;
+    });
+    return counts;
+  }, [displayData]);
+
+  const freshnessLabel = useMemo(() => {
+    if (!displayData?.generated_at) return "—";
+    const updated = new Date(displayData.generated_at);
+    const hours = Math.max(0, Math.round((Date.now() - updated.getTime()) / 3_600_000));
+    if (hours < 1) return "updated <1h ago";
+    if (hours < 24) return `updated ${hours}h ago`;
+    return `updated ${Math.floor(hours / 24)}d ago`;
+  }, [displayData]);
+
+  const dataSourceLabel = dataError ? 'ERROR' : displayData?.sources?.nino34 === 'live' ? 'LIVE NOAA' : 'PARTIAL';
+  const dataSourceColor = dataError ? 'text-red-400' : displayData?.sources?.nino34 === 'live' ? 'text-green-400' : 'text-amber-400';
 
   return (
     <div id="en-nino-root" className="min-h-screen bg-[#0B0F19] text-[#EAECEF] font-sans selection:bg-red-500/30 selection:text-white px-4 py-8 md:px-8 overflow-x-hidden relative">
@@ -357,7 +390,7 @@ export default function App() {
             </span>
             {currentScenario === "active" && (
               <div className="text-xs font-mono tracking-widest text-[#FF4E4E] font-bold uppercase flex items-center gap-1.5 bg-red-950/40 px-3 py-1 rounded-full border border-red-950">
-                <Flame className="w-3.5 h-3.5" /> SUPER EL NIÑO 2026 ACTIVE
+                <Flame className="w-3.5 h-3.5" /> {displayData?.enso_status?.advisory || "ENSO MONITORING"} — {displayData?.enso_status?.category || "—"}
               </div>
             )}
             {currentScenario === "neutral" && (
@@ -375,8 +408,13 @@ export default function App() {
                 <Compass className="w-3.5 h-3.5" /> EL NIÑO MODOKI WATCH
               </div>
             )}
-            <div className="text-xs font-mono text-gray-500">
-              PIPELINE LEVEL: Tier-1 (INSTITUTIONAL ENGAGED)
+            <div className="text-[10px] font-mono text-gray-500 flex items-center gap-2">
+              <Activity className="w-3 h-3 text-emerald-400" />
+              <span className="text-emerald-400 font-bold">{sourceCounts.live} LIVE</span>
+              <span>·</span>
+              <span className="text-amber-400 font-bold">{sourceCounts.derived} DERIVED</span>
+              <span>·</span>
+              <span className="text-rose-400 font-bold">{sourceCounts.synthetic} SYNTHETIC</span>
             </div>
           </div>
           <div className="text-xs font-mono text-gray-450 bg-white/5 px-3 py-1.5 rounded border border-white/5 flex items-center gap-2">
@@ -385,7 +423,9 @@ export default function App() {
               [{dataSourceLabel}]
             </span>
             <span className="text-gray-500">|</span>
-            <span>Date: <strong className="text-white">{liveData?.generated_at?.split('T')[0] || '---'}</strong></span>
+            <span title={liveData?.generated_at || ''}>Data: <strong className="text-white">{liveData?.generated_at?.split('T')[0] || '---'}</strong></span>
+            <span className="text-gray-500">|</span>
+            <span className="text-gray-500">{freshnessLabel}</span>
             <button
               onClick={handleRefresh}
               disabled={isLoading}
@@ -520,7 +560,9 @@ export default function App() {
                   currentScenario === "neutral" ? "text-slate-300" :
                   currentScenario === "lanina" ? "text-sky-400" : "text-amber-400"
                 }`}>
-                  {currentScenario === "active" && "+2.4°C Superheat"}
+                  {currentScenario === "active" && (displayData?.current?.nino34
+                    ? `${displayData.current.nino34.value >= 0 ? "+" : ""}${displayData.current.nino34.value.toFixed(2)}°C Niño-3.4`
+                    : "+—°C")}
                   {currentScenario === "neutral" && "+0.1°C Balanced"}
                   {currentScenario === "lanina" && "-1.7°C Extreme Cold"}
                   {currentScenario === "modoki" && "+1.3°C Centralized"}
@@ -863,18 +905,28 @@ export default function App() {
             </div>
 
             <div className="bg-slate-950/60 p-3 rounded-lg border border-white/5 space-y-1.5">
-              <div className="text-[10px] font-mono tracking-wider font-bold text-gray-405 uppercase border-b border-white/5 pb-0.5">MODEL PROBABILITY MATRIX:</div>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1.2 text-[9px] font-mono">
-                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#ff4e4e]/80" /><span>CFSv2 (NCEP)</span></div>
-                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#f97316]/80" /><span>ECMWF (Europe)</span></div>
-                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#818cf8]/80" /><span>UKMO (UK)</span></div>
-                <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#10b981]/80" /><span>NASA (GISS)</span></div>
-                <div className="col-span-2 flex items-center gap-1.5 border-t border-white/5 pt-1 mt-0.5 text-rose-400 font-bold">
-                  <span className="h-1.5 w-1.5 bg-rose-500 rounded-full animate-ping" />
-                  <span>Weighted Mean: Model Convergence Active</span>
+                <div className="text-[10px] font-mono tracking-wider font-bold text-gray-400 uppercase border-b border-white/5 pb-0.5">CPC OFFICIAL OUTLOOK:</div>
+                <div className="space-y-1 text-[9px] font-mono">
+                  {displayData?.enso_status?.probabilities?.very_strong_chance && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                      <span className="text-rose-300 font-bold">
+                        {displayData.enso_status.probabilities.very_strong_chance} chance of {displayData.enso_status.probabilities.very_strong_event || "a strong event"}
+                      </span>
+                    </div>
+                  )}
+                  {displayData?.enso_status?.issued && (
+                    <div className="text-gray-500 pt-1 border-t border-white/5">
+                      Official discussion: {displayData.enso_status.issued}
+                      {displayData.enso_status.next_discussion ? ` · next: ${displayData.enso_status.next_discussion}` : ""}
+                    </div>
+                  )}
+                  <div className="text-gray-600">
+                    Plume models: CFSv2 · ECMWF · UKMO · GFDL · NASA · JMA · Statistical
+                    {displayData?.sources?.plume === "synthetic" ? " (schematic — official IRI figure linked below)" : ""}
+                  </div>
                 </div>
               </div>
-            </div>
           </section>
 
         </div>
@@ -944,14 +996,20 @@ export default function App() {
               </div>
             </div>
 
-            {/* MAP RENDERING CANVAS */}
+            {/* MAP RENDERING CANVAS (lazy-loaded deck.gl engine) */}
             <div className="w-full relative overflow-visible">
-              <GeographicContoursMap 
-                olrData={displayData.olr_anomaly} 
-                precipData={displayData.precip_forecast} 
-                windData={displayData.wind850_anomaly}
-                mapType={mapType}
-              />
+              <Suspense fallback={
+                <div className="h-72 flex items-center justify-center text-[10px] font-mono text-gray-500">
+                  Loading map engine…
+                </div>
+              }>
+                <GeographicContoursMap
+                  olrData={displayData.olr_anomaly}
+                  precipData={displayData.precip_forecast}
+                  windData={displayData.wind850_anomaly}
+                  mapType={mapType}
+                />
+              </Suspense>
             </div>
 
             <p className="text-[10px] text-gray-405 leading-relaxed bg-[#0b0f19]/80 p-3 rounded-lg border border-white/5 font-mono">
@@ -979,8 +1037,78 @@ export default function App() {
             <RegionalImpactAtlasSection scenario={currentScenario} />
           </div>
 
-          <HistoricAnalogsSection />
+          <HistoricAnalogsSection comparisonEvents={displayData?.comparison?.events} />
         </section>
+
+        {/* AI EXPERT BRIEFING + NEWS DIGEST (DeepSeek, generated in the data pipeline) */}
+        {briefing && (
+          <motion.section
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15 }}
+            id="expert-briefing-card"
+            className="bg-slate-900/10 backdrop-blur-md border border-white/5 rounded-2xl p-6 shadow-xl"
+          >
+            <div className="flex items-center gap-2 border-b border-white/5 pb-4 mb-4">
+              <Newspaper className="w-4 h-4 text-sky-400" />
+              <h3 className="text-xs font-sans font-extrabold text-white tracking-widest uppercase">
+                AI Expert Briefing
+              </h3>
+              <span className="text-[9px] font-mono bg-sky-950/40 text-sky-400 px-2 py-0.5 rounded border border-sky-900/50 uppercase">
+                {briefing.data_confidence} confidence · {briefing.model}
+              </span>
+              <span className="ml-auto text-[9px] font-mono text-gray-500">
+                {briefing.generated_at?.split("T")[0]}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-8 space-y-3">
+                <h4 className="text-lg font-sans font-bold text-sky-300">{briefing.headline}</h4>
+                <p className="text-xs text-gray-300 leading-relaxed font-light">{briefing.summary}</p>
+                <p className="text-xs text-gray-400 leading-relaxed font-light">{briefing.outlook}</p>
+              </div>
+              <div className="lg:col-span-4 space-y-3">
+                {briefing.what_changed?.length > 0 && (
+                  <div className="bg-slate-950/40 rounded-xl p-3 border border-white/5">
+                    <div className="text-[9px] font-mono font-bold text-amber-400 uppercase mb-1.5">What changed</div>
+                    <ul className="space-y-1 text-[11px] text-gray-300">
+                      {briefing.what_changed.map((c, i) => <li key={i}>· {c}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {briefing.risks?.length > 0 && (
+                  <div className="bg-red-950/20 rounded-xl p-3 border border-red-900/30">
+                    <div className="text-[9px] font-mono font-bold text-red-400 uppercase mb-1.5 flex items-center gap-1">
+                      <ShieldAlert className="w-3 h-3" /> Risk factors
+                    </div>
+                    <ul className="space-y-1 text-[11px] text-gray-300">
+                      {briefing.risks.map((r, i) => <li key={i}>· {r}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {briefing.news && briefing.news.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <div className="text-[9px] font-mono font-bold text-gray-400 uppercase mb-2">News digest</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {briefing.news.map((n, i) => (
+                    <a key={i} href={n.url} target="_blank" rel="noopener noreferrer"
+                       className="bg-slate-950/40 rounded-xl p-3 border border-white/5 hover:border-sky-500/30 transition-colors block">
+                      <div className="text-[10px] font-mono text-sky-400 uppercase mb-1">{n.source}</div>
+                      <div className="text-xs text-gray-200 font-semibold leading-snug">{n.title}</div>
+                      <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">{n.summary}</div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[9px] text-gray-600 mt-4 font-mono">{briefing.disclaimer}</p>
+          </motion.section>
+        )}
 
         {/* DOCK FOOTER COMPONENT WITH FUNCTIONAL API LINKS */}
         <footer className="border-t border-white/5 pt-8 pb-12 flex flex-col md:flex-row justify-between items-start text-xs font-mono text-gray-500 gap-6">
