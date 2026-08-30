@@ -144,6 +144,27 @@ def test_mei_parser(monkeypatch):
     assert len(data) == 487
 
 
+PROB_SAMPLE = """<html><body>
+<table id="probabilities-table">
+<tr><th>Season</th><th>La Niña</th><th>Neutral</th><th>El Niño</th></tr>
+<tr><td>JAS Jul Aug Sep</td><td>0</td><td>0</td><td>100</td></tr>
+<tr><td>SON Sep Oct Nov</td><td>0</td><td>0</td><td>100</td></tr>
+<tr><td>NDJ Nov Dec Jan</td><td>0</td><td>0</td><td>100</td></tr>
+<tr><td>DJF Dec Jan Feb</td><td>0</td><td>0</td><td>100</td></tr>
+<tr><td>FMA Feb Mar Apr</td><td>0</td><td>3</td><td>97</td></tr>
+<tr><td>MAM Mar Apr May</td><td>0</td><td>18</td><td>82</td></tr>
+</table></body></html>"""
+
+
+def test_cpc_probabilities_parser(monkeypatch):
+    monkeypatch.setattr(fd, "fetch_text", lambda url, **kw: PROB_SAMPLE)
+    data, meta = fd.fetch_cpc_probabilities()
+    assert meta["source"] == "live"
+    assert data[0] == {"season": "JAS", "la_nina": 0, "neutral": 0, "el_nino": 100}
+    assert data[-1] == {"season": "MAM", "la_nina": 0, "neutral": 18, "el_nino": 82}
+    assert len(data) == 6
+
+
 def test_ensodisc_parser(monkeypatch):
     monkeypatch.setattr(fd, "fetch_text", lambda url, **kw: ENSO_DISC_SAMPLE)
     data, meta = fd.fetch_cpc_ensodisc()
@@ -199,6 +220,20 @@ def test_isotherm_depth_nan():
     assert fd._isotherm_depth(depths, [26.0, float("nan"), 18.0, 12.0]) is None
     d = fd._isotherm_depth(depths, [26.0, 22.0, 18.0, float("nan")])
     assert d is not None and 19.0 < d < 21.0
+
+
+def test_event_comparison_merged_peak_year():
+    """Events that never drop below 0.5 merge; label must use the peak year."""
+    oni = [
+        {"season": "SON", "year": 2014, "value": 0.7},
+        {"season": "NDJ", "year": 2015, "value": 2.6},
+        {"season": "JFM", "year": 2016, "value": 2.3},
+        {"season": "MAM", "year": 2016, "value": 0.4},
+    ]
+    ev = fd.event_comparison(oni)["events"][0]
+    assert ev["peak_year"] == 2015
+    assert ev["label"] == "2015–2016"
+    assert ev["peak"] == 2.6
 
 
 def test_isotherm_depth():

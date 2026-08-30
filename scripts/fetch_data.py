@@ -185,6 +185,7 @@ def fetch_cpc_weekly() -> tuple[dict, dict]:
 # --------------------------------------------------------------------------
 CPC_ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
 SEASONS = ["DJF", "JFM", "FMA", "MAM", "AMJ", "MJJ", "JJA", "JAS", "ASO", "SON", "OND", "NDJ"]
+SEASONS_3 = ["JAS", "ASO", "SON", "OND", "NDJ", "DJF", "JFM", "FMA", "MAM"]
 
 
 def fetch_cpc_oni() -> tuple[list, dict]:
@@ -354,6 +355,39 @@ def fetch_cpc_ensodisc() -> tuple[dict, dict]:
     }
     log.info("  OK: status=%r issued=%s", status, issued)
     return result, {"source": "live", "url": CPC_ENSO_DISC_URL}
+
+
+# --------------------------------------------------------------------------
+# 6b. CPC official ENSO probabilities (La Niña / Neutral / El Niño by season)
+# --------------------------------------------------------------------------
+CPC_PROB_URL = ("https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/"
+                "enso/roni/probabilities/")
+
+
+def fetch_cpc_probabilities() -> tuple[list[dict], dict]:
+    html = fetch_text(CPC_PROB_URL)
+    if not html:
+        return [], {"source": "synthetic", "error": "fetch failed"}
+    rows = re.findall(r"<tr>(.*?)</tr>", html, flags=re.S | re.I)
+    records = []
+    for row in rows:
+        cells = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", c)).strip()
+                 for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, flags=re.S | re.I)]
+        if len(cells) < 4:
+            continue
+        season = cells[0].split()[0] if cells[0] else ""
+        if season not in SEASONS_3:
+            continue
+        try:
+            la, neu, el = (float(cells[1]), float(cells[2]), float(cells[3]))
+        except ValueError:
+            continue
+        records.append({"season": season, "la_nina": la, "neutral": neu, "el_nino": el})
+    if not records:
+        return [], {"source": "synthetic", "error": "no probability rows parsed"}
+    log.info("  OK: %d seasons (latest %s: El Niño %s%%)",
+             len(records), records[-1]["season"], records[-1]["el_nino"])
+    return records, {"source": "live", "url": CPC_PROB_URL}
 
 
 # --------------------------------------------------------------------------
@@ -733,11 +767,13 @@ def event_comparison(oni: list[dict]) -> dict:
     for rec in oni:
         active = rec["value"] >= 0.5
         if active and cur is None:
-            cur = {"start": f"{rec['year']}", "peak": rec["value"], "peak_season": rec["season"]}
+            cur = {"start": f"{rec['year']}", "peak": rec["value"],
+                   "peak_season": rec["season"], "peak_year": rec["year"]}
         elif active and cur is not None:
             if rec["value"] > cur["peak"]:
                 cur["peak"] = rec["value"]
                 cur["peak_season"] = rec["season"]
+                cur["peak_year"] = rec["year"]
         elif not active and cur is not None:
             cur["end"] = f"{rec['year']}"
             events.append(cur)
@@ -757,9 +793,14 @@ def event_comparison(oni: list[dict]) -> dict:
         if not ev.get("active") and ev["peak"] < 0.6:
             continue  # suppress borderline blips
         key = (ev.get("start", ""), ev.get("end", ""))
-        ev["label"] = labels.get(key, f"{ev.get('start','?')}–{ev.get('end', ev.get('start','?'))}")
+        peak_year = int(ev.get("peak_year") or 0)
+        ev["label"] = (
+            labels.get(key)
+            or (f"{peak_year}–{peak_year + 1}" if peak_year
+                else f"{ev.get('start','?')}–{ev.get('end', ev.get('start','?'))}")
+        )
         if ev.get("active"):
-            ev["label"] = f"{ev['start']}–{int(ev['start']) + 1} (developing)"
+            ev["label"] = f"{peak_year or ev['start']}–{(peak_year or int(ev['start'])) + 1} (developing)"
         ev["category"] = oni_category(ev["peak"])
         result.append(ev)
     return {"events": result}
@@ -907,7 +948,9 @@ def main() -> int:
     run("psl_mei", fetch_psl_mei)
     log.info("[6/11] CPC ENSO Diagnostic Discussion...")
     run("cpc_ensodisc", fetch_cpc_ensodisc)
-    log.info("[7/11] GODAS subsurface (Hovmöller/WWV/thermocline)...")
+    log.info("[6b/12] CPC official ENSO probabilities...")
+    run("cpc_probabilities", fetch_cpc_probabilities)
+    log.info("[7/12] GODAS subsurface (Hovmöller/WWV/thermocline)...")
     run("godas", lambda: fetch_godas(now, out_dir))
     log.info("[8/11] OLR anomaly (CPC blended, 1°)...")
     run("olr", lambda: fetch_olr(now))
@@ -982,6 +1025,7 @@ def main() -> int:
         "wind850_anomaly": wind,
         "ensemble_plume": plume,
         "precip_forecast": precip,
+        "enso_probabilities": endpoints.get("cpc_probabilities", []),
         "enso_status": {
             "advisory": status_block.get("advisory", "Unknown"),
             "strength": status_block.get("strength") or category or "Unknown",
@@ -1007,6 +1051,7 @@ def main() -> int:
             "wind850": status.get("wind850", {}).get("source"),
             "precip": status.get("precip", {}).get("source"),
             "enso_status": status.get("cpc_ensodisc", {}).get("source"),
+            "enso_probabilities": status.get("cpc_probabilities", {}).get("source"),
         },
         "_pipeline": {
             "version": VERSION,

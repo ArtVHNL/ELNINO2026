@@ -1,28 +1,12 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 
-export default defineConfig(() => {
-  return {
-    base: './',
-    plugins: [react(), tailwindcss()],
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
-    },
-    server: {
-      port: 3000,
-      // Proxy /api/livedata naar Flask backend (server.py)
-      proxy: {
-        '/api': {
-          target: 'http://127.0.0.1:8899',
-          changeOrigin: true,
-        },
-      },
-      hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
-    },
-  };
+export default defineConfig({
+  base: './',
+  plugins: [react(), tailwindcss()],
+  server: {
+    port: 3000,
+    host: '0.0.0.0',
+  },
 });
