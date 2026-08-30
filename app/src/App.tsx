@@ -8,7 +8,6 @@ import { AlignedComparison } from "./components/AlignedComparison";
 import { ImpactMap } from "./components/ImpactMap";
 import { OutlookChart } from "./components/OutlookChart";
 import { PredictedChart } from "./components/PredictedChart";
-import { SourceMap } from "./components/SourceMap";
 
 const MONTH_FULL = [
   "January", "February", "March", "April", "May", "June",
@@ -226,7 +225,6 @@ export default function App() {
             <p className="mt-3 max-w-3xl text-justify text-sm text-gray-500">
               The three strongest El Niños on record, aligned at the month each event became active. Values: NOAA CPC monthly Niño-3.4 anomaly (ERSST, 1991–2020 mean).
             </p>
-            <SourceMap />
           </section>
 
           {/* 2 — what is predicted (observed vs forecast water temperature) */}

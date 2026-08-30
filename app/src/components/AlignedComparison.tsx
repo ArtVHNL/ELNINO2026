@@ -37,13 +37,16 @@ function seriesFor(monthly: IndexValue[], startYear: number, startMonth: number)
 }
 
 export function AlignedComparison({ monthly, events }: Props) {
-  const { refs, refSeries, currentSeries, x, y, gridYs, xTicks, curveText } = useMemo(() => {
+  const { refs, refSeries, refEnds, currentSeries, x, y, gridYs, xTicks, curveText } = useMemo(() => {
     const completed = events.filter(e => !e.active);
     const refs = [...completed].sort((a, b) => b.peak - a.peak).slice(0, 3);
     const current = events.find(e => e.active);
 
-    const refSeries = refs.map(e => ({
-      label: `${e.label} (peak +${e.peak.toFixed(1)}°C)`,
+    const palette = ["#9CA3AF", "#60A5FA", "#F59E0B"];
+    const refSeries = refs.map((e, i) => ({
+      label: e.label,
+      peak: e.peak,
+      color: palette[i % palette.length],
       vals: e.start ? seriesFor(monthly, parseInt(e.start, 10), e.start_month || 6) : null,
     })).filter(r => r.vals);
 
@@ -74,7 +77,14 @@ export function AlignedComparison({ monthly, events }: Props) {
           : `Three months in, 2026-27 runs ${Math.abs(diff).toFixed(2)}°C below the average of the record events at the same stage.`;
     }
 
-    return { refs, refSeries, currentSeries: curVals, x, y, gridYs, xTicks, curveText };
+    const endLabel = (vals: (number | null)[]) => {
+      for (let i = vals.length - 1; i >= 0; i--) {
+        if (vals[i] !== null) return { x: x(i + X_MIN), y: y(vals[i] as number) };
+      }
+      return null;
+    };
+    const refEnds = refSeries.map(r => endLabel(r.vals!));
+    return { refs, refSeries, refEnds, currentSeries: curVals, x, y, gridYs, xTicks, curveText };
   }, [monthly, events]);
 
   const pathOf = (vals: (number | null)[]) =>
@@ -104,12 +114,34 @@ export function AlignedComparison({ monthly, events }: Props) {
 
         {/* historical events */}
         {refSeries.map((r, i) => (
-          <path key={i} d={pathOf(r.vals!)} fill="none" stroke="#D1D5DB" strokeWidth="1.5" />
+          <g key={i}>
+            <path d={pathOf(r.vals!)} fill="none" stroke={r.color} strokeWidth="1.5" />
+            {(() => {
+              let best = -1;
+              r.vals!.forEach((v, k) => { if (v !== null && (best < 0 || v > (r.vals![best] ?? 0))) best = k; });
+              if (best >= 0 && r.vals![best] !== null) {
+                return <circle cx={x(best + X_MIN)} cy={y(r.vals![best] as number)} r="2.6" fill={r.color} />;
+              }
+              return null;
+            })()}
+          </g>
+        ))}
+        {refEnds.map((p, i) => p && (
+          <text key={i} x={p.x - 6} y={p.y + 3} textAnchor="end" fontSize="10" fontWeight="600" fill={refSeries[i].color} fontFamily="inherit">
+            {refSeries[i].label}
+          </text>
         ))}
 
         {/* current event */}
         {curPath && <path d={curPath} fill="none" stroke="#DC2626" strokeWidth="3" strokeLinejoin="round" />}
-        {lastPt && <circle cx={lastPt.px} cy={lastPt.py} r="3.5" fill="#DC2626" />}
+        {lastPt && (
+          <g>
+            <circle cx={lastPt.px} cy={lastPt.py} r="3.5" fill="#DC2626" />
+            <text x={lastPt.px + 8} y={lastPt.py + 4} fontSize="10" fontWeight="700" fill="#DC2626" fontFamily="inherit">
+              2026–27 (now)
+            </text>
+          </g>
+        )}
 
         {xTicks.map((t, i) => (
           <text key={i} x={t.py} y={H - 8} textAnchor="middle" fontSize="10" fill="#6B7280" fontFamily="inherit">
@@ -121,9 +153,11 @@ export function AlignedComparison({ monthly, events }: Props) {
         <span className="inline-flex items-center gap-2">
           <span className="inline-block h-[3px] w-8 shrink-0 bg-[#DC2626]" /> 2026–27 (current)
         </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-[2px] w-8 shrink-0 bg-[#D1D5DB]" /> 1982–83 · 1997–98 · 2015–16 (record events)
-        </span>
+        {refSeries.map(r => (
+          <span key={r.label} className="inline-flex items-center gap-2">
+            <span className="inline-block h-[2px] w-8 shrink-0" style={{ backgroundColor: r.color }} /> {r.label}
+          </span>
+        ))}
         <span className="inline-flex items-center gap-2">
           <span className="inline-block h-[3px] w-8 shrink-0 border-t-2 border-dashed border-[#9CA3AF]" /> climatological mean (0 °C)
         </span>

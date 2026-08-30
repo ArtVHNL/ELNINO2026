@@ -1,59 +1,35 @@
 // ============================================================================
-// "What are the consequences?" — flat world map, impact shading per country.
-// No ocean data. Land in light gray; affected countries tinted with their
-// expected weather anomaly (drought red, flooding blue, wetter light blue).
+// "What are the consequences?" — interactive flat world map. Every country is
+// shaded by its expected El Niño effect (documented signal or, honestly,
+// "little change"). Hover a country for its specific outlook.
 // ============================================================================
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { feature } from "topojson-client";
+import { CATEGORY_META, impactFor } from "../impact";
 
 interface CountryFeature {
   type: "Feature";
   id?: string | number;
-  properties: Record<string, unknown>;
+  properties: { name?: string } & Record<string, unknown>;
   geometry: GeoJSON.Geometry;
 }
 
-interface Zone {
-  label: string;
-  fill: string;
-  opacity: number;
-  ids: string[]; // ISO 3166-1 numeric
+interface HoverState {
+  name: string;
+  phrase: string;
+  category: string;
+  x: number;
+  y: number;
 }
-
-const ZONES: Zone[] = [
-  {
-    label: "drier than normal",
-    fill: "#DC2626",
-    opacity: 0.26,
-    // Australia, Indonesia, Papua New Guinea, India, southern Africa,
-    // Colombia and Venezuela
-    ids: ["036", "360", "598", "356", "710", "716", "508", "894", "072", "516", "170", "862"],
-  },
-  {
-    label: "heavy rain, flooding",
-    fill: "#1D4ED8",
-    opacity: 0.40,
-    // Peru, Ecuador (Pacific coast of South America)
-    ids: ["604", "218"],
-  },
-  {
-    label: "wetter than normal",
-    fill: "#60A5FA",
-    opacity: 0.32,
-    // Kenya, Somalia, Ethiopia (East Africa); Uruguay, Paraguay, Argentina
-    // (southern South America)
-    ids: ["404", "706", "231", "858", "600", "032"],
-  },
-];
 
 const W = 880;
 const H = 440;
 
-const pad = (id: string) => id.padStart(3, "0");
-
 export function ImpactMap() {
   const [countries, setCountries] = useState<CountryFeature[] | null>(null);
+  const [hover, setHover] = useState<HoverState | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,69 +40,105 @@ export function ImpactMap() {
       })
       .then((topo: any) => {
         if (cancelled) return;
-        const fc = feature(topo, topo.objects.countries) as unknown as {
-          features: CountryFeature[];
-        };
+        const fc = feature(topo, topo.objects.countries) as unknown as { features: CountryFeature[] };
         setCountries(fc.features);
       })
       .catch(err => console.warn("[ImpactMap] world atlas:", err));
     return () => { cancelled = true; };
   }, []);
 
-  const { landPaths, zonePaths } = useMemo(() => {
-    if (!countries) return { landPaths: [], zonePaths: [] };
+  const shapes = useMemo(() => {
+    if (!countries) return [];
     const projection = d3.geoNaturalEarth1().fitExtent(
       [[10, 10], [W - 10, H - 10]],
       { type: "Sphere" } as any,
     );
     const path = d3.geoPath(projection);
-
-    const zoneById = new Map<string, Zone>();
-    ZONES.forEach(z => z.ids.forEach(id => zoneById.set(pad(id), z)));
-
-    const landPaths: { d: string; zone?: Zone }[] = [];
-    for (const c of countries) {
+    return countries.map(c => {
       const d = path(c as any);
-      if (!d) continue;
-      const zone = typeof c.id !== "undefined" ? zoneById.get(pad(String(c.id))) : undefined;
-      landPaths.push({ d, zone });
-    }
-    return { landPaths, zonePaths: ZONES };
+      if (!d) return null;
+      const info = impactFor(c.id);
+      const meta = CATEGORY_META[info.category];
+      return { d, id: c.id, name: c.properties.name || "Unknown", info, meta };
+    }).filter(Boolean) as {
+      d: string; id?: string | number; name: string; info: ReturnType<typeof impactFor>; meta: typeof CATEGORY_META.drought;
+    }[];
   }, [countries]);
 
   if (!countries) {
     return (
       <div className="mt-4 h-[300px] flex items-center justify-center text-sm text-gray-500">
-        Loading base map…
+        Loading map…
       </div>
     );
   }
 
   return (
-    <div className="mt-4">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="El Niño impact map">
-        {landPaths.map((lp, i) => (
+    <div className="mt-4 relative">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full h-auto"
+        role="img"
+        aria-label="Interactive map of expected El Niño effects per country"
+        onMouseLeave={() => setHover(null)}
+      >
+        {shapes.map((s, i) => (
           <path
             key={i}
-            d={lp.d}
-            fill={lp.zone ? lp.zone.fill : "#F3F4F6"}
-            fillOpacity={lp.zone ? lp.zone.opacity : 1}
+            d={s.d}
+            fill={s.meta.fill}
+            fillOpacity={s.meta.opacity}
             stroke="#D1D5DB"
             strokeWidth="0.5"
+            className="cursor-pointer transition-[filter] duration-75 hover:brightness-95"
+            onMouseMove={e => {
+              const rect = svgRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              setHover({
+                name: s.name,
+                phrase: s.info.phrase,
+                category: s.meta.label,
+                x: ((e.clientX - rect.left) / rect.width) * 100,
+                y: ((e.clientY - rect.top) / rect.height) * 100,
+              });
+            }}
           />
         ))}
       </svg>
-      <div className="mt-3 flex flex-wrap justify-center gap-x-8 gap-y-1 text-xs text-gray-700">
-        {zonePaths.map(z => (
-          <span key={z.label} className="inline-flex items-center gap-2">
+
+      {/* tooltip */}
+      {hover && (
+        <div
+          className="pointer-events-none absolute max-w-xs border border-gray-200 bg-white px-3 py-2 shadow-sm"
+          style={{ left: `${Math.min(hover.x, 82)}%`, top: `${Math.max(hover.y - 12, 2)}%`, transform: "translateY(-100%)" }}
+        >
+          <div className="flex items-center gap-2 text-xs font-bold text-gray-900">
             <span
-              className="inline-block h-3 w-6"
-              style={{ backgroundColor: z.fill, opacity: z.opacity }}
+              className="inline-block h-2.5 w-2.5"
+              style={{ backgroundColor: hover.category === "Little change expected" ? "#E5E7EB" : (hover.category === "Drier than usual" ? "#DC2626" : hover.category === "Flooding risk" ? "#1D4ED8" : "#60A5FA") }}
             />
-            {z.label}
+            {hover.name}
+          </div>
+          <p className="mt-1 text-xs leading-snug text-gray-600">{hover.phrase}</p>
+        </div>
+      )}
+
+      {/* legend */}
+      <div className="mt-3 flex flex-wrap justify-center gap-x-8 gap-y-1 text-xs text-gray-700">
+        {(["drought", "flood", "wetter", "muted"] as const).map(cat => (
+          <span key={cat} className="inline-flex items-center gap-2">
+            <span
+              className="inline-block h-3 w-6 border border-gray-200"
+              style={{ backgroundColor: CATEGORY_META[cat].fill, opacity: CATEGORY_META[cat].opacity }}
+            />
+            {CATEGORY_META[cat].label}
           </span>
         ))}
       </div>
+      <p className="mt-2 text-xs text-center text-gray-400">
+        Hover a country for its outlook. Canonical pattern (NOAA/IRI consensus); the NMME precipitation model is not openly machine-readable.
+      </p>
     </div>
   );
 }
