@@ -1,60 +1,60 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-09-01T10:48:33Z",
+ "generated_at": "2026-09-01T20:35:45Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 165,
+   "latency_ms": 307,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
   },
   "cpc_ersst5": {
    "source": "live",
-   "latency_ms": 170,
+   "latency_ms": 304,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 779,
+   "latency_ms": 238,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 161,
+   "latency_ms": 187,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 71,
+   "latency_ms": 180,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 283,
+   "latency_ms": 215,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 80,
+   "latency_ms": 87,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "cpc_probabilities": {
    "source": "live",
-   "latency_ms": 78,
+   "latency_ms": 181,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/"
   },
   "nmme_nino34": {
    "source": "live",
-   "latency_ms": 2513,
+   "latency_ms": 2837,
    "url": "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom/ENSMEAN/2026080800/"
   },
   "godas": {
    "source": "live",
-   "latency_ms": 46140,
+   "latency_ms": 46806,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
   },
   "olr": {
    "source": "live",
-   "latency_ms": 2156,
+   "latency_ms": 2402,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
   },
   "plume": {
@@ -65,7 +65,7 @@
   },
   "wind850": {
    "source": "synthetic",
-   "latency_ms": 4,
+   "latency_ms": 3,
    "note": "NCEP/NCAR reanalysis via IRI requires login; schematic field"
   },
   "precip": {
@@ -83,6 +83,6 @@
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1522635
+  "data.json_size_bytes": 1522755
  }
 }
