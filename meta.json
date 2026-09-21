@@ -1,60 +1,60 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-09-21T11:29:38Z",
+ "generated_at": "2026-09-21T21:43:36Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 349,
+   "latency_ms": 406,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
   },
   "cpc_ersst5": {
    "source": "live",
-   "latency_ms": 362,
+   "latency_ms": 450,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 442,
+   "latency_ms": 617,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 310,
+   "latency_ms": 350,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 267,
+   "latency_ms": 292,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 107,
+   "latency_ms": 151,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 242,
+   "latency_ms": 298,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "cpc_probabilities": {
    "source": "live",
-   "latency_ms": 312,
+   "latency_ms": 344,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/"
   },
   "nmme_nino34": {
    "source": "live",
-   "latency_ms": 21260,
+   "latency_ms": 24725,
    "url": "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom/ENSMEAN/2026090800/"
   },
   "godas": {
    "source": "live",
-   "latency_ms": 45453,
+   "latency_ms": 134791,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
   },
   "olr": {
    "source": "live",
-   "latency_ms": 811,
+   "latency_ms": 7951,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
   },
   "plume": {
@@ -83,6 +83,6 @@
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1576535
+  "data.json_size_bytes": 1576044
  }
 }
