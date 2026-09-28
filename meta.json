@@ -1,61 +1,61 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-09-27T20:55:41Z",
+ "generated_at": "2026-09-28T12:24:24Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 184,
+   "latency_ms": 225,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
   },
   "cpc_ersst5": {
    "source": "live",
-   "latency_ms": 165,
+   "latency_ms": 166,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 195,
+   "latency_ms": 281,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 155,
+   "latency_ms": 229,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 177,
+   "latency_ms": 141,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 257,
+   "latency_ms": 205,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 166,
+   "latency_ms": 197,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "cpc_probabilities": {
    "source": "live",
-   "latency_ms": 177,
+   "latency_ms": 230,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/"
   },
   "nmme_nino34": {
    "source": "live",
-   "latency_ms": 2318,
+   "latency_ms": 5094,
    "url": "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom/ENSMEAN/2026090800/"
   },
   "godas": {
-   "source": "live",
-   "latency_ms": 47414,
-   "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
+   "source": "synthetic",
+   "latency_ms": 12952,
+   "error": "all GODAS DAP reads failed"
   },
   "olr": {
-   "source": "live",
-   "latency_ms": 1907,
-   "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
+   "source": "synthetic",
+   "latency_ms": 173,
+   "error": "[Errno -70] NetCDF: DAP server error: 'https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc'"
   },
   "plume": {
    "source": "synthetic",
@@ -76,13 +76,13 @@
  },
  "summary": {
   "endpoints_total": 14,
-  "live": 11,
+  "live": 9,
   "derived": 0,
-  "synthetic": 3,
+  "synthetic": 5,
   "error": 0
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1576993
+  "data.json_size_bytes": 330144
  }
 }
