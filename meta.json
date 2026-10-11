@@ -1,88 +1,88 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-10-11T11:50:16Z",
+ "generated_at": "2026-10-11T21:31:02Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 556,
+   "latency_ms": 368,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
   },
   "cpc_ersst5": {
    "source": "live",
-   "latency_ms": 479,
+   "latency_ms": 214,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 661,
+   "latency_ms": 378,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 292,
+   "latency_ms": 216,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 295,
+   "latency_ms": 212,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 190,
+   "latency_ms": 159,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 303,
+   "latency_ms": 267,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "cpc_probabilities": {
    "source": "live",
-   "latency_ms": 382,
+   "latency_ms": 215,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/"
   },
   "nmme_nino34": {
    "source": "live",
-   "latency_ms": 24417,
+   "latency_ms": 7171,
    "url": "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom/ENSMEAN/2026100800/"
   },
   "godas": {
    "source": "live",
-   "latency_ms": 246890,
+   "latency_ms": 63584,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
   },
   "olr": {
-   "source": "synthetic",
-   "latency_ms": 18333,
-   "error": "[Errno -70] NetCDF: DAP server error: 'https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc'"
+   "source": "live",
+   "latency_ms": 2104,
+   "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
   },
   "plume": {
    "source": "synthetic",
-   "latency_ms": 20,
+   "latency_ms": 5,
    "url": "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/",
    "note": "IRI data library requires login; official plume figure linked instead"
   },
   "wind850": {
    "source": "synthetic",
-   "latency_ms": 4,
+   "latency_ms": 2,
    "note": "NCEP/NCAR reanalysis via IRI requires login; schematic field"
   },
   "precip": {
    "source": "synthetic",
-   "latency_ms": 2,
+   "latency_ms": 1,
    "note": "NMME via IRI requires login; climatological schematic"
   }
  },
  "summary": {
   "endpoints_total": 14,
-  "live": 10,
+  "live": 11,
   "derived": 0,
-  "synthetic": 4,
+  "synthetic": 3,
   "error": 0
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1409911
+  "data.json_size_bytes": 1579605
  }
 }
