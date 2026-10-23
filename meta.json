@@ -1,65 +1,65 @@
 {
  "schema_version": "3.0.0",
- "generated_at": "2026-10-23T10:43:55Z",
+ "generated_at": "2026-10-23T21:01:20Z",
  "health": {
   "cpc_sstoi": {
    "source": "live",
-   "latency_ms": 557,
+   "latency_ms": 352,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices"
   },
   "cpc_ersst5": {
    "source": "live",
-   "latency_ms": 453,
+   "latency_ms": 309,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii"
   },
   "cpc_weekly": {
    "source": "live",
-   "latency_ms": 559,
+   "latency_ms": 336,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/wksst9120.for"
   },
   "cpc_oni": {
    "source": "live",
-   "latency_ms": 376,
+   "latency_ms": 302,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
   },
   "cpc_soi": {
    "source": "live",
-   "latency_ms": 348,
+   "latency_ms": 246,
    "url": "https://www.cpc.ncep.noaa.gov/data/indices/soi"
   },
   "psl_mei": {
    "source": "live",
-   "latency_ms": 149,
+   "latency_ms": 159,
    "url": "https://psl.noaa.gov/enso/mei/data/meiv2.data"
   },
   "cpc_ensodisc": {
    "source": "live",
-   "latency_ms": 376,
+   "latency_ms": 219,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
   },
   "cpc_probabilities": {
    "source": "live",
-   "latency_ms": 294,
+   "latency_ms": 151,
    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/"
   },
   "nmme_nino34": {
    "source": "live",
-   "latency_ms": 25870,
+   "latency_ms": 7592,
    "url": "https://ftp.cpc.ncep.noaa.gov/NMME/realtime_anom/ENSMEAN/2026100800/"
   },
   "godas": {
    "source": "live",
-   "latency_ms": 48731,
+   "latency_ms": 47127,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/godas/pottmp.2026.nc"
   },
   "olr": {
    "source": "live",
-   "latency_ms": 1694,
+   "latency_ms": 1390,
    "url": "https://psl.noaa.gov/thredds/dodsC/Datasets/cpc_blended_olr-1deg/olr.cbo-1deg.day.anom.nc"
   },
   "plume": {
    "source": "synthetic",
-   "latency_ms": 19,
+   "latency_ms": 6,
    "url": "https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/",
    "note": "IRI data library requires login; official plume figure linked instead"
   },
@@ -83,6 +83,6 @@
  },
  "debug_non_json": null,
  "checksum": {
-  "data.json_size_bytes": 1635226
+  "data.json_size_bytes": 1635368
  }
 }
